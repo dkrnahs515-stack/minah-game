@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, user-scalable=no"
+  />
+
+  <meta
+    name="description"
+    content="투타임과 에주어의 이야기를 다룬 비공식 Forsaken 팬메이드 2D 웹게임"
+  />
+
+  <meta name="theme-color" content="#06080d" />
+
+  <title>FORSAKEN: Two Time & Azure</title>
+
+  <link rel="stylesheet" href="assets/css/style.css" />
+</head>
+
+<body>
+  <div id="app">
+    <canvas
+      id="game"
+      width="1280"
+      height="720"
+      aria-label="투타임과 에주어 팬메이드 게임"
+    ></canvas>
+
+    <!-- 게임 HUD -->
+    <div id="hud" class="hidden">
+      <div class="top-hud">
+        <div class="chapter panel">
+          <small id="chapterLabel">CHAPTER 1</small>
+          <strong id="chapterTitle">평화로운 마을</strong>
+        </div>
+
+        <div id="bossHud" class="boss-hud panel">
+          <div class="boss-title">
+            <strong>AZURE — FORSAKEN FORM</strong>
+            <span id="bossHpText">300 / 300</span>
+          </div>
+
+          <div class="bar-track">
+            <div id="bossFill" class="bar-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="objective" class="panel">
+        에주어에게 다가가 E키로 대화하세요.
+      </div>
+
+      <div id="message" class="panel">
+        알림
+      </div>
+
+      <div id="prompt" class="panel">
+        E키로 상호작용
+      </div>
+
+      <div class="bars panel">
+        <div class="bar-row">
+          <span>체력</span>
+
+          <div class="bar-track">
+            <div id="hpFill" class="bar-fill"></div>
+          </div>
+
+          <strong id="hpText">100</strong>
+        </div>
+
+        <div class="bar-row">
+          <span>스태미나</span>
+
+          <div class="bar-track">
+            <div id="staminaFill" class="bar-fill"></div>
+          </div>
+
+          <strong id="staminaText">100</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- 시작 화면 -->
+    <div id="startOverlay" class="overlay">
+      <div class="card">
+        <p class="eyebrow">
+          UNOFFICIAL FANMADE STORY PROTOTYPE
+        </p>
+
+        <h1>FORSAKEN: Two Time & Azure</h1>
+
+        <p>
+          투타임과 에주어가 평화롭게 살아가던 마을에서 시작되는
+          팬메이드 이야기입니다. 한 번의 희생 이후 투타임은
+          포세이큰 구역으로 떨어지고, 괴물로 변한 에주어와
+          마주하게 됩니다.
+        </p>
+
+        <div class="controls-grid">
+          <div class="control-item">
+            <strong>이동</strong><br />
+            A/D 또는 방향키
+          </div>
+
+          <div class="control-item">
+            <strong>점프</strong><br />
+            Space 또는 W
+          </div>
+
+          <div class="control-item">
+            <strong>달리기</strong><br />
+            Shift 유지
+          </div>
+
+          <div class="control-item">
+            <strong>찌르기</strong><br />
+            J 또는 K
+          </div>
+
+          <div class="control-item">
+            <strong>상호작용</strong><br />
+            E
+          </div>
+
+          <div class="control-item">
+            <strong>대화 진행</strong><br />
+            Enter 또는 E
+          </div>
+        </div>
+
+        <p class="fan-notice">
+          이 작품은 비공식 팬메이드 프로토타입이며 원작 개발팀 및
+          Roblox와 공식적인 관련이 없습니다.
+        </p>
+
+        <button id="startBtn" class="primary">
+          이야기 시작
+        </button>
+      </div>
+    </div>
+
+    <!-- 대화 화면 -->
+    <div id="dialogueOverlay" class="overlay hidden">
+      <div id="dialogueBox" class="panel">
+        <div id="speaker" class="speaker">
+          투타임
+        </div>
+
+        <div id="dialogueText">
+          대사
+        </div>
+
+        <div class="dialogue-guide">
+          Enter 또는 E를 눌러 계속
+        </div>
+      </div>
+    </div>
+
+    <!-- 엔딩 화면 -->
+    <div id="endOverlay" class="overlay hidden">
+      <div class="card">
+        <p class="eyebrow">
+          CHAPTER COMPLETE
+        </p>
+
+        <h2 id="endTitle">
+          에주어와의 결전 이후
+        </h2>
+
+        <p id="endText"></p>
+
+        <button id="restartBtn" class="primary">
+          처음부터 다시 시작
+        </button>
+
+        <button id="freePlayBtn" class="secondary">
+          보스전 다시 하기
+        </button>
+      </div>
+    </div>
+
+    <!-- 모바일 조작 버튼 -->
+    <div id="mobileControls">
+      <div class="dpad">
+        <button class="touch jump" data-key="jump">
+          ▲
+        </button>
+
+        <button class="touch left" data-key="left">
+          ◀
+        </button>
+
+        <button class="touch right" data-key="right">
+          ▶
+        </button>
+      </div>
+
+      <div class="actions">
+        <button class="touch run" data-key="run">
+          RUN
+        </button>
+
+        <button class="touch interact" data-key="interact">
+          E
+        </button>
+
+        <button class="touch stab" data-key="stab">
+          STAB
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/js/game.js" defer></script>
+</body>
+</html>
