@@ -1,0 +1,67 @@
+:root {
+  color-scheme: dark;
+
+  --bg: #06080d;
+  --panel: rgba(10, 14, 23, 0.93);
+  --line: rgba(255, 255, 255, 0.14);
+  --text: #f4f7fb;
+  --muted: #aab4c6;
+  --accent: #8ad8ff;
+  --danger: #ff5a71;
+  --azure: #61b8ff;
+  --gold: #ffd26e;
+  --success: #70e59b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+
+  background: var(--bg);
+  color: var(--text);
+
+  font-family:
+    Pretendard,
+    "Noto Sans KR",
+    system-ui,
+    sans-serif;
+}
+
+body {
+  display: grid;
+  place-items: center;
+}
+
+#app {
+  position: relative;
+
+  width: min(100vw, 1280px);
+  max-height: 100vh;
+  aspect-ratio: 16 / 9;
+
+  overflow: hidden;
+
+  background: #0b1019;
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.62);
+}
+
+canvas {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  background: #111827;
+  touch-action: none;
+}
+
+.hidden {
+  display: none !important;
+}
