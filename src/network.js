@@ -3,9 +3,8 @@ import { FIREBASE_CONFIG, GAME_CONFIG as C, ROOM_ID } from "./config.js";
 const emptyAdapter = {
   mode: "offline",
   uid: "local-player",
-  start: async () => ({ uid: "local-player", players: new Map() }),
   publish: () => {},
-  stop: () => {},
+  stop: async () => {},
 };
 
 export async function createNetworkAdapter(onPlayersChanged, onStatusChanged) {
@@ -18,16 +17,16 @@ export async function createNetworkAdapter(onPlayersChanged, onStatusChanged) {
 
   try {
     const version = "12.16.0";
-    const [{ initializeApp }, authModule, dbModule] = await Promise.all([
+    const [appModule, authModule, dbModule] = await Promise.all([
       import(`https://www.gstatic.com/firebasejs/${version}/firebase-app.js`),
       import(`https://www.gstatic.com/firebasejs/${version}/firebase-auth.js`),
       import(`https://www.gstatic.com/firebasejs/${version}/firebase-database.js`),
     ]);
 
-    const app = initializeApp(FIREBASE_CONFIG);
+    const app = appModule.getApps().length ? appModule.getApp() : appModule.initializeApp(FIREBASE_CONFIG);
     const auth = authModule.getAuth(app);
-    const credential = await authModule.signInAnonymously(auth);
-    const uid = credential.user.uid;
+    const user = auth.currentUser || (await authModule.signInAnonymously(auth)).user;
+    const uid = user.uid;
     const db = dbModule.getDatabase(app);
     const playerRef = dbModule.ref(db, `rooms/${ROOM_ID}/players/${uid}`);
     const playersRef = dbModule.ref(db, `rooms/${ROOM_ID}/players`);
@@ -40,14 +39,15 @@ export async function createNetworkAdapter(onPlayersChanged, onStatusChanged) {
     const unsubscribePlayers = dbModule.onValue(playersRef, snapshot => {
       const raw = snapshot.val() || {};
       const players = new Map();
-      Object.entries(raw).forEach(([id, p]) => {
-        if (id !== uid && Number.isFinite(p?.x) && Number.isFinite(p?.y)) players.set(id, p);
+      Object.entries(raw).forEach(([id, player]) => {
+        if (id !== uid && Number.isFinite(player?.x) && Number.isFinite(player?.y)) players.set(id, player);
       });
       onPlayersChanged?.(players);
     });
 
     const unsubscribeConnected = dbModule.onValue(connectedRef, snapshot => {
-      onStatusChanged?.(snapshot.val() === true ? "online" : "connecting", snapshot.val() === true ? "온라인" : "재연결 중");
+      const online = snapshot.val() === true;
+      onStatusChanged?.(online ? "online" : "connecting", online ? "온라인" : "재연결 중");
     });
 
     let lastPublish = 0;
@@ -70,13 +70,18 @@ export async function createNetworkAdapter(onPlayersChanged, onStatusChanged) {
     return {
       mode: "firebase",
       uid,
-      start: async () => ({ uid, players: new Map() }),
       publish,
-      stop: () => {
+      stop: async () => {
+        if (stopped) return;
         stopped = true;
         unsubscribePlayers();
         unsubscribeConnected();
-        dbModule.remove(playerRef).catch(() => {});
+        try {
+          await dbModule.remove(playerRef);
+          await disconnect.cancel();
+        } catch (error) {
+          console.warn("플레이어 퇴장 정보 정리 실패", error);
+        }
       },
     };
   } catch (error) {
