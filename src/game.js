@@ -14,12 +14,14 @@ export class PixelRPG {
     this.player = {
       x: 1440, y: 1110, prevX: 1440, prevY: 1110,
       w: 24, h: 31, dir: "down", moving: false, step: 0,
-      hp: 100, mp: 100, color: "#4f8e5b", name: "무명의 모험가",
+      hp: 100, mp: 100, color: "#4f8e5b", name: "모험가",
     };
     this.camera = { x: 0, y: 0, prevX: 0, prevY: 0 };
     this.remotePlayers = new Map();
     this.network = null;
     this.running = false;
+    this.inputEnabled = false;
+    this.eventsBound = false;
     this.lastFrame = 0;
     this.accumulator = 0;
     this.fixedDt = 1 / C.SIMULATION_HZ;
@@ -31,22 +33,70 @@ export class PixelRPG {
     this.highFpsSeconds = 0;
   }
 
-  async start() {
-    this.bindEvents();
+  async enter(nickname) {
+    if (this.running) return;
+    if (!this.eventsBound) {
+      this.bindEvents();
+      this.eventsBound = true;
+    }
+
+    this.player.name = sanitizeName(nickname);
+    this.ui.playerName.textContent = this.player.name;
+    this.ui.playerCount.textContent = "1";
+    this.remotePlayers.clear();
+    this.inputEnabled = true;
     this.resize();
     this.drawMinimapBase();
+
+    if (this.network) await this.network.stop();
     this.network = await createNetworkAdapter(
       players => this.receiveRemotePlayers(players),
       (status, label) => this.updateNetworkStatus(status, label),
     );
+
     this.running = true;
-    requestAnimationFrame(t => this.loop(t));
+    this.lastFrame = 0;
+    this.accumulator = 0;
+    this.notify(`${this.player.name}님, 픽셀 월드에 오신 것을 환영합니다.`);
+    requestAnimationFrame(timestamp => this.loop(timestamp));
+  }
+
+  async leave({ silent = false } = {}) {
+    if (!this.running && !this.network) return;
+    this.running = false;
+    this.inputEnabled = false;
+    this.keys.clear();
+    this.player.moving = false;
+    this.lastFrame = 0;
+    this.accumulator = 0;
+
+    const network = this.network;
+    this.network = null;
+    if (network) await network.stop();
+
+    this.remotePlayers.clear();
+    this.ui.playerCount.textContent = "0";
+    this.updateNetworkStatus("offline", "나감");
+    if (!silent) this.ui.message.classList.remove("show");
+  }
+
+  isRunning() {
+    return this.running;
+  }
+
+  setInputEnabled(enabled) {
+    this.inputEnabled = Boolean(enabled);
+    if (!this.inputEnabled) {
+      this.keys.clear();
+      this.player.moving = false;
+    }
   }
 
   bindEvents() {
     addEventListener("resize", () => this.resize(), { passive: true });
     addEventListener("blur", () => this.keys.clear());
     addEventListener("keydown", event => {
+      if (!this.running || !this.inputEnabled || isTypingTarget(event.target)) return;
       this.keys.add(event.code);
       if (["KeyQ","KeyE","KeyR","Digit1","Digit2","Digit3"].includes(event.code) && !event.repeat) {
         this.activateEmptySlot(event.code);
@@ -55,7 +105,9 @@ export class PixelRPG {
     });
     addEventListener("keyup", event => this.keys.delete(event.code));
     document.querySelectorAll(".slot").forEach(button => {
-      button.addEventListener("click", () => this.activateEmptySlot(button.dataset.code));
+      button.addEventListener("click", () => {
+        if (this.running && this.inputEnabled) this.activateEmptySlot(button.dataset.code);
+      });
     });
   }
 
@@ -89,7 +141,7 @@ export class PixelRPG {
     const alpha = this.accumulator / this.fixedDt;
     this.render(alpha);
     this.measurePerformance(timestamp, frameSeconds);
-    requestAnimationFrame(t => this.loop(t));
+    requestAnimationFrame(nextTimestamp => this.loop(nextTimestamp));
   }
 
   fixedUpdate(dt) {
@@ -99,10 +151,12 @@ export class PixelRPG {
     this.camera.prevY = this.camera.y;
 
     let dx = 0, dy = 0;
-    if (this.keys.has("KeyW")) dy -= 1;
-    if (this.keys.has("KeyS")) dy += 1;
-    if (this.keys.has("KeyA")) dx -= 1;
-    if (this.keys.has("KeyD")) dx += 1;
+    if (this.inputEnabled) {
+      if (this.keys.has("KeyW")) dy -= 1;
+      if (this.keys.has("KeyS")) dy += 1;
+      if (this.keys.has("KeyA")) dx -= 1;
+      if (this.keys.has("KeyD")) dx += 1;
+    }
 
     this.player.moving = Boolean(dx || dy);
     if (this.player.moving) {
@@ -171,6 +225,7 @@ export class PixelRPG {
   }
 
   receiveRemotePlayers(players) {
+    if (!this.running && !this.network) return;
     const now = performance.now();
     const next = new Map();
     players.forEach((data, uid) => {
@@ -219,7 +274,7 @@ export class PixelRPG {
   notify(text) {
     this.ui.message.textContent = text;
     this.ui.message.classList.add("show");
-    this.messageTimer = 1.4;
+    this.messageTimer = 1.7;
   }
 
   updateNetworkStatus(status, label) {
@@ -254,30 +309,30 @@ export class PixelRPG {
   }
 
   drawMinimapBase() {
-    const g = this.minimapCtx;
-    g.imageSmoothingEnabled = false;
-    g.clearRect(0, 0, this.minimap.width, this.minimap.height);
-    g.drawImage(this.worldLayer, 0, 0, C.WORLD_WIDTH, C.WORLD_HEIGHT, 0, 0, this.minimap.width, this.minimap.height);
+    const context = this.minimapCtx;
+    context.imageSmoothingEnabled = false;
+    context.clearRect(0, 0, this.minimap.width, this.minimap.height);
+    context.drawImage(this.worldLayer, 0, 0, C.WORLD_WIDTH, C.WORLD_HEIGHT, 0, 0, this.minimap.width, this.minimap.height);
   }
 
   renderMinimap() {
-    const g = this.minimapCtx;
-    const w = this.minimap.width, h = this.minimap.height;
-    g.clearRect(0, 0, w, h);
-    g.drawImage(this.worldLayer, 0, 0, C.WORLD_WIDTH, C.WORLD_HEIGHT, 0, 0, w, h);
+    const context = this.minimapCtx;
+    const width = this.minimap.width, height = this.minimap.height;
+    context.clearRect(0, 0, width, height);
+    context.drawImage(this.worldLayer, 0, 0, C.WORLD_WIDTH, C.WORLD_HEIGHT, 0, 0, width, height);
     const drawDot = (x, y, color, size) => {
-      g.fillStyle = color;
-      g.fillRect(Math.round(x / C.WORLD_WIDTH * w - size / 2), Math.round(y / C.WORLD_HEIGHT * h - size / 2), size, size);
+      context.fillStyle = color;
+      context.fillRect(Math.round(x / C.WORLD_WIDTH * width - size / 2), Math.round(y / C.WORLD_HEIGHT * height - size / 2), size, size);
     };
-    this.remotePlayers.forEach(p => drawDot(p.x, p.y, "#f8fafc", 3));
+    this.remotePlayers.forEach(player => drawDot(player.x, player.y, "#f8fafc", 3));
     drawDot(this.player.x, this.player.y, "#ff4d6d", 5);
   }
 }
 
-function drawPixelCharacter(ctx, p, cameraX, cameraY) {
-  const x = Math.round(p.x - cameraX);
-  const y = Math.round(p.y - cameraY);
-  const bob = p.moving ? Math.sin(p.step) * 1.6 : 0;
+function drawPixelCharacter(ctx, player, cameraX, cameraY) {
+  const x = Math.round(player.x - cameraX);
+  const y = Math.round(player.y - cameraY);
+  const bob = player.moving ? Math.sin(player.step) * 1.6 : 0;
   ctx.save();
   ctx.translate(x, y + bob);
 
@@ -288,7 +343,7 @@ function drawPixelCharacter(ctx, p, cameraX, cameraY) {
   ctx.fillRect(2, 6, 7, 12);
   ctx.fillStyle = "#b88a4e";
   ctx.fillRect(-10, -9, 20, 18);
-  ctx.fillStyle = p.color || "#4f8e5b";
+  ctx.fillStyle = player.color || "#4f8e5b";
   ctx.fillRect(-14, -11, 6, 20);
   ctx.fillRect(8, -11, 6, 20);
   ctx.fillRect(-12, -14, 24, 5);
@@ -298,16 +353,16 @@ function drawPixelCharacter(ctx, p, cameraX, cameraY) {
   ctx.fillRect(-10, -27, 20, 7);
   ctx.fillRect(-10, -22, 5, 9);
   ctx.fillStyle = "#202938";
-  if (p.dir === "left") ctx.fillRect(-7, -18, 2, 2);
-  else if (p.dir === "right") ctx.fillRect(5, -18, 2, 2);
+  if (player.dir === "left") ctx.fillRect(-7, -18, 2, 2);
+  else if (player.dir === "right") ctx.fillRect(5, -18, 2, 2);
   else { ctx.fillRect(-5, -18, 2, 2); ctx.fillRect(3, -18, 2, 2); }
   ctx.fillStyle = "#dceeff";
   ctx.fillRect(11, -4, 4, 19);
   ctx.fillStyle = "#6b4b2f";
   ctx.fillRect(9, 11, 8, 4);
 
-  if (p.remote) {
-    const name = sanitizeName(p.name);
+  if (player.remote) {
+    const name = sanitizeName(player.name);
     ctx.font = "11px sans-serif";
     const width = Math.ceil(ctx.measureText(name).width) + 10;
     ctx.fillStyle = "rgba(10,16,27,.78)";
@@ -322,4 +377,9 @@ function drawPixelCharacter(ctx, p, cameraX, cameraY) {
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function lerp(a, b, t) { return a + (b - a) * t; }
 function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
-function sanitizeName(value) { return typeof value === "string" ? value.slice(0, 16) : "모험가"; }
+function sanitizeName(value) {
+  return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, 12) || "모험가" : "모험가";
+}
+function isTypingTarget(target) {
+  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target?.isContentEditable;
+}
