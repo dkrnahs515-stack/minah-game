@@ -1,52 +1,82 @@
 # Firebase 배포 및 온라인 연결
 
+Firebase 프로젝트: `pixel-world-8cb9b`
+
 이 프로젝트는 Firebase Hosting, Authentication 익명 로그인, Realtime Database를 사용합니다.
 
-## 1. Firebase 프로젝트 만들기
+## 현재 완료된 설정
 
-1. Firebase Console에서 새 프로젝트를 생성합니다.
-2. 프로젝트 설정에서 웹 앱(`</>`)을 등록합니다.
-3. 표시되는 `firebaseConfig` 객체를 복사합니다.
+- Firebase 웹 앱 설정 연결
+- `.firebaserc` 프로젝트 별칭 연결
+- `firebase.json` Hosting 및 Database 규칙 설정
+- Firebase Hosting GitHub Actions 워크플로 추가
+- 익명 인증 및 Realtime Database 클라이언트 코드 구현
+- 원격 플레이어 위치 보간 및 접속 종료 자동 삭제 구현
 
-## 2. 익명 로그인 활성화
+## 1. 익명 로그인 활성화
 
-Authentication > 로그인 방법에서 `익명` 제공업체를 활성화합니다.
+Firebase Console에서 다음 경로로 이동합니다.
 
-## 3. Realtime Database 만들기
+`Authentication > Sign-in method > Anonymous > Enable`
 
-1. Realtime Database에서 데이터베이스를 생성합니다.
-2. 앱과 가까운 위치를 선택합니다.
-3. 데이터베이스 URL을 확인합니다.
-4. `src/firebase-config.js`의 `FIREBASE_CONFIG`에 `databaseURL`을 포함한 전체 설정 객체를 입력합니다.
+## 2. Realtime Database 만들기
 
-## 4. 프로젝트 ID 연결
+1. `Build > Realtime Database > Create Database`로 이동합니다.
+2. 앱 이용자와 가까운 리전을 선택합니다.
+3. 잠금 모드로 생성합니다.
+4. 생성된 Database URL을 복사합니다.
+5. `src/firebase-config.js`의 빈 `databaseURL` 값에 붙여 넣습니다.
 
-`.firebaserc.example`을 `.firebaserc`로 복사하고 `YOUR_FIREBASE_PROJECT_ID`를 실제 프로젝트 ID로 변경합니다.
+예시 형식:
 
-## 5. 로컬 테스트
+```js
+databaseURL: "https://pixel-world-8cb9b-default-rtdb.REGION.firebasedatabase.app"
+```
+
+## 3. Database 보안 규칙 배포
+
+저장소의 `database.rules.json`을 Firebase Console의 Realtime Database `Rules` 탭에 붙여 넣고 게시하거나 Firebase CLI로 배포합니다.
+
+```bash
+firebase deploy --only database
+```
+
+## 4. Firebase Hosting 자동 배포 연결
+
+워크플로 파일:
+
+`.github/workflows/firebase-hosting-merge.yml`
+
+필요한 GitHub Actions Secret:
+
+`FIREBASE_SERVICE_ACCOUNT_PIXEL_WORLD_8CB9B`
+
+Firebase CLI에서 아래 명령을 실행하면 GitHub 저장소 연결, 서비스 계정 생성, Secret 등록 과정을 자동으로 진행할 수 있습니다.
+
+```bash
+firebase login
+firebase init hosting:github
+```
+
+저장소는 `dkrnahs515-stack/minah-game`, 배포 브랜치는 `main`을 선택합니다.
+
+## 5. 수동 배포
+
+Firebase CLI가 설치된 컴퓨터에서 저장소 루트 기준으로 실행합니다.
 
 ```bash
 npm install -g firebase-tools
 firebase login
-firebase emulators:start
-```
-
-브라우저에서 `http://localhost:5000`으로 접속합니다.
-
-## 6. 배포
-
-Hosting과 Realtime Database 규칙을 함께 배포합니다.
-
-```bash
+firebase use pixel-world-8cb9b
 firebase deploy --only hosting,database
 ```
 
-배포 후 게임 주소는 일반적으로 다음 두 주소로 제공됩니다.
+배포 주소:
 
-- `https://PROJECT_ID.web.app`
-- `https://PROJECT_ID.firebaseapp.com`
+- `https://pixel-world-8cb9b.web.app`
+- `https://pixel-world-8cb9b.firebaseapp.com`
 
-## 현재 온라인 구조
+## 온라인 구조
 
 - 익명 인증으로 플레이어별 UID 발급
 - `rooms/public/players/{uid}`에 위치와 방향 저장
