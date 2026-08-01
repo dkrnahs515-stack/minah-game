@@ -2,156 +2,63 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>픽셀 월드 RPG</title>
-  <style>
-    :root{--panel:#111827dd;--line:#ffffff33;--text:#f8fafc;--muted:#cbd5e1;--accent:#7dd3fc;--empty:#334155}
-    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0f172a;font-family:Arial,"Noto Sans KR",sans-serif}
-    canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rendering:crisp-edges}
-    .hud{position:fixed;inset:0;pointer-events:none;color:var(--text);text-shadow:0 2px 3px #000}
-    .top{position:absolute;top:14px;left:14px;display:flex;gap:10px;align-items:flex-start}
-    .panel{padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel);backdrop-filter:blur(4px)}
-    .title{font-weight:800;margin-bottom:6px}.small{font-size:12px;color:var(--muted)}
-    .bar{width:220px;height:12px;border:2px solid #fff8;background:#0f172a;margin-top:6px}.bar span{display:block;height:100%;width:100%;background:#ef4444}
-    .bottom{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);display:flex;gap:16px;align-items:flex-end}
-    .group{display:flex;gap:8px;padding:10px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
-    .slot{width:68px;height:68px;border:2px solid #94a3b8;border-radius:10px;background:linear-gradient(145deg,#1e293b,#0f172a);display:grid;place-items:center;position:relative}
-    .slot .key{position:absolute;left:5px;top:4px;font-weight:900;color:#fff;font-size:14px}.slot .empty{font-size:11px;color:#94a3b8;text-shadow:none}.slot.flash{animation:flash .2s ease}
-    @keyframes flash{50%{transform:scale(.92);border-color:#facc15;box-shadow:0 0 16px #facc15}}
-    .msg{position:absolute;left:50%;top:18px;transform:translateX(-50%);padding:9px 14px;border-radius:999px;background:#0f172acc;border:1px solid #ffffff33;font-weight:700;opacity:0;transition:opacity .15s}
-    .msg.show{opacity:1}
-    .help{position:absolute;right:14px;top:14px;line-height:1.65}
-    kbd{display:inline-block;min-width:22px;padding:1px 5px;border:1px solid #ffffff66;border-bottom-width:3px;border-radius:5px;background:#1e293b;text-align:center;color:white;text-shadow:none}
-    @media(max-width:720px){.help{display:none}.slot{width:54px;height:54px}.bottom{gap:8px}.group{gap:5px;padding:7px}.bar{width:160px}}
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <title>픽셀 월드 온라인 RPG</title>
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <canvas id="game" width="960" height="540" aria-label="2D 픽셀 RPG 게임 화면"></canvas>
-  <div class="hud">
-    <div class="top">
-      <div class="panel">
-        <div class="title">무명의 모험가</div>
-        <div class="small">LV. 1 · 중앙 초원</div>
-        <div class="bar"><span id="hpBar"></span></div>
+  <canvas id="game" aria-label="2D 픽셀 온라인 RPG 게임 화면"></canvas>
+
+  <div class="hud" aria-live="polite">
+    <section class="player-panel glass">
+      <div class="player-header">
+        <div>
+          <strong>무명의 모험가</strong>
+          <small>LV. 1 · 중앙 초원</small>
+        </div>
+        <span id="networkBadge" class="status offline">오프라인</span>
       </div>
-    </div>
-    <div id="message" class="msg">아직 비어 있는 슬롯입니다.</div>
-    <div class="panel help">
-      <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 이동</div>
-      <div><kbd>Q</kbd><kbd>E</kbd><kbd>R</kbd> 스킬</div>
-      <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 아이템</div>
-    </div>
-    <div class="bottom">
-      <div class="group" aria-label="스킬 슬롯">
-        <div class="slot" data-key="KeyQ"><span class="key">Q</span><span class="empty">스킬 없음</span></div>
-        <div class="slot" data-key="KeyE"><span class="key">E</span><span class="empty">스킬 없음</span></div>
-        <div class="slot" data-key="KeyR"><span class="key">R</span><span class="empty">스킬 없음</span></div>
+      <div class="stat-row"><span>HP</span><b id="hpText">100 / 100</b></div>
+      <div class="bar hp"><i id="hpBar"></i></div>
+      <div class="stat-row"><span>MP</span><b id="mpText">100 / 100</b></div>
+      <div class="bar mp"><i id="mpBar"></i></div>
+    </section>
+
+    <section class="performance-panel glass">
+      <span><b id="fpsText">0</b> FPS</span>
+      <span><b id="playerCount">1</b>명 접속</span>
+      <span id="qualityText">고화질</span>
+    </section>
+
+    <div id="message" class="message">대륙을 탐험해 보세요.</div>
+
+    <section class="minimap glass" aria-label="미니맵">
+      <canvas id="minimap" width="220" height="140"></canvas>
+      <div class="minimap-label">세계 지도</div>
+    </section>
+
+    <section class="controls glass">
+      <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>이동</span></div>
+      <div><kbd>Q</kbd><kbd>E</kbd><kbd>R</kbd><span>스킬</span></div>
+      <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><span>아이템</span></div>
+    </section>
+
+    <section class="hotbar" aria-label="단축키 슬롯">
+      <div class="slot-group glass">
+        <button class="slot" data-code="KeyQ" type="button"><span class="key">Q</span><span class="slot-type">SKILL</span><span class="empty">비어 있음</span></button>
+        <button class="slot" data-code="KeyE" type="button"><span class="key">E</span><span class="slot-type">SKILL</span><span class="empty">비어 있음</span></button>
+        <button class="slot" data-code="KeyR" type="button"><span class="key">R</span><span class="slot-type">SKILL</span><span class="empty">비어 있음</span></button>
       </div>
-      <div class="group" aria-label="아이템 슬롯">
-        <div class="slot" data-key="Digit1"><span class="key">1</span><span class="empty">아이템 없음</span></div>
-        <div class="slot" data-key="Digit2"><span class="key">2</span><span class="empty">아이템 없음</span></div>
-        <div class="slot" data-key="Digit3"><span class="key">3</span><span class="empty">아이템 없음</span></div>
+      <div class="slot-group glass">
+        <button class="slot item" data-code="Digit1" type="button"><span class="key">1</span><span class="slot-type">ITEM</span><span class="empty">비어 있음</span></button>
+        <button class="slot item" data-code="Digit2" type="button"><span class="key">2</span><span class="slot-type">ITEM</span><span class="empty">비어 있음</span></button>
+        <button class="slot item" data-code="Digit3" type="button"><span class="key">3</span><span class="slot-type">ITEM</span><span class="empty">비어 있음</span></button>
       </div>
-    </div>
+    </section>
   </div>
-  <script>
-    "use strict";
-    const canvas=document.getElementById("game"),ctx=canvas.getContext("2d");
-    ctx.imageSmoothingEnabled=false;
-    const TILE=32,keys=new Set();
-    const player={x:480,y:300,w:22,h:28,speed:170,dir:"down",step:0};
-    const camera={x:0,y:0};
-    const world={w:1800,h:1100};
-    const message=document.getElementById("message");
-    let messageTimer=0,last=performance.now();
 
-    function resize(){
-      const ratio=Math.min(devicePixelRatio||1,2);
-      canvas.width=Math.floor(innerWidth*ratio);canvas.height=Math.floor(innerHeight*ratio);
-      canvas.style.width=innerWidth+"px";canvas.style.height=innerHeight+"px";
-      ctx.setTransform(ratio,0,0,ratio,0,0);ctx.imageSmoothingEnabled=false;
-    }
-    addEventListener("resize",resize);resize();
-
-    function notify(text){message.textContent=text;message.classList.add("show");messageTimer=1200}
-    function flashSlot(code){const el=document.querySelector(`[data-key="${code}"]`);if(!el)return;el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash")}
-    addEventListener("keydown",e=>{
-      keys.add(e.code);
-      if(["KeyQ","KeyE","KeyR"].includes(e.code)&&!e.repeat){flashSlot(e.code);notify(`${e.key.toUpperCase()} 스킬 슬롯은 아직 비어 있습니다.`)}
-      if(["Digit1","Digit2","Digit3"].includes(e.code)&&!e.repeat){flashSlot(e.code);notify(`${e.key}번 아이템 슬롯은 아직 비어 있습니다.`)}
-      if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].includes(e.code))e.preventDefault();
-    });
-    addEventListener("keyup",e=>keys.delete(e.code));
-
-    function update(dt){
-      let dx=0,dy=0;
-      if(keys.has("KeyW"))dy--;
-      if(keys.has("KeyS"))dy++;
-      if(keys.has("KeyA"))dx--;
-      if(keys.has("KeyD"))dx++;
-      if(dx||dy){
-        const len=Math.hypot(dx,dy);dx/=len;dy/=len;
-        player.x=Math.max(24,Math.min(world.w-24,player.x+dx*player.speed*dt));
-        player.y=Math.max(24,Math.min(world.h-24,player.y+dy*player.speed*dt));
-        player.step+=dt*10;
-        if(Math.abs(dx)>Math.abs(dy))player.dir=dx>0?"right":"left";else player.dir=dy>0?"down":"up";
-      }
-      const vw=innerWidth,vh=innerHeight;
-      camera.x=Math.max(0,Math.min(world.w-vw,player.x-vw/2));
-      camera.y=Math.max(0,Math.min(world.h-vh,player.y-vh/2));
-      if(messageTimer>0){messageTimer-=dt*1000;if(messageTimer<=0)message.classList.remove("show")}
-    }
-
-    function rect(x,y,w,h,c){ctx.fillStyle=c;ctx.fillRect(Math.round(x-camera.x),Math.round(y-camera.y),w,h)}
-    function drawGround(){
-      ctx.fillStyle="#79b95e";ctx.fillRect(0,0,innerWidth,innerHeight);
-      const sx=Math.floor(camera.x/TILE)*TILE,sy=Math.floor(camera.y/TILE)*TILE;
-      for(let y=sy;y<camera.y+innerHeight+TILE;y+=TILE){
-        for(let x=sx;x<camera.x+innerWidth+TILE;x+=TILE){
-          const n=((x/TILE)*17+(y/TILE)*31)%11;
-          rect(x,y,TILE,TILE,n<2?"#73ae58":"#7fbd61");
-          if(n===3){rect(x+6,y+9,3,3,"#d8f0a8");rect(x+12,y+5,2,4,"#497d3e")}
-        }
-      }
-      rect(0,470,world.w,90,"#c6ad78");
-      rect(790,0,100,world.h,"#c6ad78");
-      for(let x=0;x<world.w;x+=48)rect(x,482+(x%96?8:0),24,5,"#a88d5b");
-      rect(1240,0,150,world.h,"#4da9c7");
-      for(let y=0;y<world.h;y+=50)rect(1260,y+10,80,5,"#a7e8ed");
-      rect(1220,440,190,150,"#79543d");
-      for(let x=1225;x<1400;x+=24)rect(x,450,14,130,"#b7895b");
-    }
-
-    function drawTree(x,y){
-      rect(x-5,y+14,10,22,"#6c452b");rect(x-18,y-5,36,26,"#2f7d47");rect(x-12,y-15,24,20,"#3c9655");rect(x-4,y-20,8,6,"#6dbb69")
-    }
-    function drawDecor(){
-      const trees=[[220,250],[320,210],[450,180],[580,250],[1050,210],[1110,330],[1470,200],[1540,360],[200,700],[400,820],[690,730],[960,860],[1610,760]];
-      trees.forEach(t=>drawTree(t[0],t[1]));
-      rect(600,355,120,90,"#d7c197");rect(586,330,148,35,"#784c3c");rect(618,395,24,50,"#54392c");rect(670,382,28,22,"#83c9da");
-      rect(812,405,56,56,"#5f6f86");rect(825,370,30,45,"#7dd3fc");rect(835,350,10,22,"#d8f7ff");
-      rect(735,465,8,38,"#6b442b");rect(710,452,58,22,"#b78654");
-    }
-
-    function drawPlayer(){
-      const x=Math.round(player.x-camera.x),y=Math.round(player.y-camera.y),bob=Math.sin(player.step)*2;
-      ctx.save();ctx.translate(x,y+bob);
-      ctx.fillStyle="#0005";ctx.fillRect(-12,13,24,7);
-      ctx.fillStyle="#5a3d2b";ctx.fillRect(-9,7,7,11);ctx.fillRect(2,7,7,11);
-      ctx.fillStyle="#b89055";ctx.fillRect(-10,-8,20,19);
-      ctx.fillStyle="#356b43";ctx.fillRect(-13,-10,5,19);ctx.fillRect(8,-10,5,19);
-      ctx.fillStyle="#f0c79d";ctx.fillRect(-9,-22,18,14);
-      ctx.fillStyle="#4a352a";ctx.fillRect(-10,-25,20,7);ctx.fillRect(-10,-20,5,8);
-      ctx.strokeStyle="#385c3c";ctx.lineWidth=3;ctx.strokeRect(-12,-27,24,20);
-      ctx.fillStyle="#1f2937";
-      if(player.dir==="left")ctx.fillRect(-7,-17,2,2);else if(player.dir==="right")ctx.fillRect(5,-17,2,2);else{ctx.fillRect(-5,-17,2,2);ctx.fillRect(3,-17,2,2)}
-      ctx.fillStyle="#dbeafe";ctx.fillRect(11,-3,4,18);ctx.fillStyle="#7c5a32";ctx.fillRect(9,11,8,4);
-      ctx.restore();
-    }
-
-    function draw(){ctx.clearRect(0,0,innerWidth,innerHeight);drawGround();drawDecor();drawPlayer()}
-    function loop(now){const dt=Math.min((now-last)/1000,.05);last=now;update(dt);draw();requestAnimationFrame(loop)}
-    requestAnimationFrame(loop);
-  </script>
+  <noscript>이 게임은 JavaScript가 필요합니다.</noscript>
+  <script type="module" src="./src/main.js"></script>
 </body>
 </html>

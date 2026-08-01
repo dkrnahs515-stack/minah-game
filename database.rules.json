@@ -1,0 +1,15 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        "players": {
+          ".read": "auth != null",
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.hasChildren(['x','y','dir','moving','name','color']) && newData.child('x').isNumber() && newData.child('x').val() >= 0 && newData.child('x').val() <= 2880 && newData.child('y').isNumber() && newData.child('y').val() >= 0 && newData.child('y').val() <= 1800 && newData.child('dir').isString() && newData.child('name').isString() && newData.child('name').val().length <= 16 && newData.child('color').isString()"
+          }
+        }
+      }
+    }
+  }
+}
