@@ -1,4 +1,5 @@
 import { GAME_CONFIG as C } from "./config.js";
+import { distanceToSegment, pointInRect } from "./collision.js";
 
 const obstacles = [
   { x: 210, y: 230, w: 510, h: 270, type: "desertCity" },
@@ -6,6 +7,13 @@ const obstacles = [
   { x: 1120, y: 170, w: 640, h: 280, type: "greatTree" },
   { x: 1360, y: 700, w: 190, h: 170, type: "ruin" },
 ];
+
+const bridges = [
+  { x: 790, y: 570, w: 190, h: 170 },
+  { x: 790, y: 1110, w: 190, h: 190 },
+];
+
+const riverSegments = createRiverSegments(40);
 
 export function createWorldLayer() {
   const layer = document.createElement("canvas");
@@ -178,4 +186,45 @@ export function getBiome(x, y) {
 
 export function getObstacles() {
   return obstacles;
+}
+
+export function isWorldPositionBlocked(x, y, radius = 0) {
+  if (
+    x - radius < 0
+    || y - radius < 0
+    || x + radius > C.WORLD_WIDTH
+    || y + radius > C.WORLD_HEIGHT
+  ) return true;
+
+  if (obstacles.some(rect => pointInRect(x, y, rect, radius))) return true;
+  if (bridges.some(rect => pointInRect(x, y, rect))) return false;
+
+  return riverSegments.some(([ax, ay, bx, by]) => (
+    distanceToSegment(x, y, ax, ay, bx, by) <= 45 + radius
+  ));
+}
+
+function createRiverSegments(steps) {
+  const segments = [];
+  let previous = cubicPoint(0);
+  for (let index = 1; index <= steps; index++) {
+    const current = cubicPoint(index / steps);
+    segments.push([previous.x, previous.y, current.x, current.y]);
+    previous = current;
+  }
+  return segments;
+}
+
+function cubicPoint(t) {
+  const inverse = 1 - t;
+  return {
+    x: inverse ** 3 * 930
+      + 3 * inverse ** 2 * t * 760
+      + 3 * inverse * t ** 2 * 1080
+      + t ** 3 * 850,
+    y: inverse ** 3 * -40
+      + 3 * inverse ** 2 * t * 560
+      + 3 * inverse * t ** 2 * 1040
+      + t ** 3 * 1840,
+  };
 }
