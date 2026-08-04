@@ -1,6 +1,20 @@
 import { GAME_CONFIG as C } from "./config.js";
-import { createWorldLayer, getBiome } from "./world.js";
+import { attackDefinition, directionVector, isTargetInAttackArc } from "./combat.js";
+import { createSlimes, damageSlime, drawSlime, updateSlimes } from "./enemies.js";
+import { movementVector } from "./input.js";
 import { createNetworkAdapter } from "./network.js";
+import { applyPlayerDamage, respawnPlayer, tickPlayerStatus } from "./player-combat.js";
+import { createWorldLayer, getBiome, isWorldPositionBlocked } from "./world.js";
+
+const SPAWN = Object.freeze({ x: 1440, y: 1110 });
+const PLAYER_RADIUS = 14;
+const MAX_MEASURED_FPS = 240;
+
+export function fpsSampleFromFrameSeconds(frameSeconds) {
+  if (frameSeconds <= 0) return null;
+  const fps = 1 / frameSeconds;
+  return fps <= MAX_MEASURED_FPS ? fps : null;
+}
 
 export class PixelRPG {
   constructor(elements) {
@@ -12,12 +26,19 @@ export class PixelRPG {
     this.keys = new Set();
     this.worldLayer = createWorldLayer();
     this.player = {
-      x: 1440, y: 1110, prevX: 1440, prevY: 1110,
+      x: SPAWN.x, y: SPAWN.y, prevX: SPAWN.x, prevY: SPAWN.y,
       w: 24, h: 31, dir: "down", moving: false, step: 0,
-      hp: 100, mp: 100, color: "#4f8e5b", name: "모험가",
+      hp: 100, maxHp: 100, mp: 100, maxMp: 100,
+      invulnerable: 0, hitFlash: 0, respawnTimer: 0,
+      color: "#4f8e5b", name: "모험가",
     };
     this.camera = { x: 0, y: 0, prevX: 0, prevY: 0 };
     this.remotePlayers = new Map();
+    this.slimes = [];
+    this.attackState = null;
+    this.basicCooldown = 0;
+    this.strongCooldown = 0;
+    this.damageNumbers = [];
     this.network = null;
     this.running = false;
     this.inputEnabled = false;
@@ -44,6 +65,7 @@ export class PixelRPG {
     this.ui.playerName.textContent = this.player.name;
     this.ui.playerCount.textContent = "1";
     this.remotePlayers.clear();
+    this.resetCombatState();
     this.inputEnabled = true;
     this.resize();
     this.drawMinimapBase();
@@ -57,7 +79,7 @@ export class PixelRPG {
     this.running = true;
     this.lastFrame = 0;
     this.accumulator = 0;
-    this.notify(`${this.player.name}님, 픽셀 월드에 오신 것을 환영합니다.`);
+    this.notify(`${this.player.name}님, 방향키로 이동하고 Ctrl로 공격하세요.`);
     requestAnimationFrame(timestamp => this.loop(timestamp));
   }
 
@@ -75,6 +97,7 @@ export class PixelRPG {
     if (network) await network.stop();
 
     this.remotePlayers.clear();
+    this.resetCombatState();
     this.ui.playerCount.textContent = "0";
     this.updateNetworkStatus("offline", "나감");
     if (!silent) this.ui.message.classList.remove("show");
@@ -85,7 +108,7 @@ export class PixelRPG {
   }
 
   setInputEnabled(enabled) {
-    this.inputEnabled = Boolean(enabled);
+    this.inputEnabled = Boolean(enabled) && this.player.respawnTimer <= 0;
     if (!this.inputEnabled) {
       this.keys.clear();
       this.player.moving = false;
@@ -97,16 +120,36 @@ export class PixelRPG {
     addEventListener("blur", () => this.keys.clear());
     addEventListener("keydown", event => {
       if (!this.running || !this.inputEnabled || isTypingTarget(event.target)) return;
-      this.keys.add(event.code);
-      if (["KeyQ","KeyE","KeyR","Digit1","Digit2","Digit3"].includes(event.code) && !event.repeat) {
+
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) {
+        this.keys.add(event.code);
+        event.preventDefault();
+        return;
+      }
+
+      if (["ControlLeft", "ControlRight"].includes(event.code) && !event.repeat) {
+        if (!event.altKey && !event.metaKey && !event.shiftKey) this.tryAttack("basic");
+        event.preventDefault();
+        return;
+      }
+
+      if (event.code === "KeyQ" && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        this.tryAttack("strong");
+        event.preventDefault();
+        return;
+      }
+
+      if (["KeyE", "KeyR", "Digit1", "Digit2", "Digit3"].includes(event.code) && !event.repeat) {
         this.activateEmptySlot(event.code);
       }
-      if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].includes(event.code)) event.preventDefault();
     });
     addEventListener("keyup", event => this.keys.delete(event.code));
+
     document.querySelectorAll(".slot").forEach(button => {
       button.addEventListener("click", () => {
-        if (this.running && this.inputEnabled) this.activateEmptySlot(button.dataset.code);
+        if (!this.running || !this.inputEnabled) return;
+        if (button.dataset.code === "KeyQ") this.tryAttack("strong");
+        else this.activateEmptySlot(button.dataset.code);
       });
     });
   }
@@ -150,46 +193,189 @@ export class PixelRPG {
     this.camera.prevX = this.camera.x;
     this.camera.prevY = this.camera.y;
 
-    let dx = 0, dy = 0;
-    if (this.inputEnabled) {
-      if (this.keys.has("KeyW")) dy -= 1;
-      if (this.keys.has("KeyS")) dy += 1;
-      if (this.keys.has("KeyA")) dx -= 1;
-      if (this.keys.has("KeyD")) dx += 1;
+    this.basicCooldown = Math.max(0, this.basicCooldown - dt);
+    this.strongCooldown = Math.max(0, this.strongCooldown - dt);
+    const wasRespawning = this.player.respawnTimer > 0;
+    tickPlayerStatus(this.player, dt);
+    if (wasRespawning && this.player.respawnTimer === 0) this.finishRespawn();
+
+    this.updateAttack(dt);
+    this.slimes = updateSlimes(this.slimes, this.player, dt, isWorldPositionBlocked);
+    this.updateDamageNumbers(dt);
+
+    if (this.player.respawnTimer <= 0) {
+      this.applySlimeContactDamage();
+      this.updatePlayerMovement(dt);
     }
 
+    this.updateCamera(dt);
+    this.network?.publish(this.player);
+    this.updateRemoteInterpolation(dt);
+    this.updateMessage(dt);
+    this.updateBiome();
+    this.updateHud();
+  }
+
+  updatePlayerMovement(dt) {
+    const movement = this.inputEnabled ? movementVector(this.keys) : { x: 0, y: 0 };
+    const dx = movement.x;
+    const dy = movement.y;
     this.player.moving = Boolean(dx || dy);
-    if (this.player.moving) {
-      const length = Math.hypot(dx, dy);
-      dx /= length;
-      dy /= length;
-      this.player.x = clamp(this.player.x + dx * C.PLAYER_SPEED * dt, 20, C.WORLD_WIDTH - 20);
-      this.player.y = clamp(this.player.y + dy * C.PLAYER_SPEED * dt, 20, C.WORLD_HEIGHT - 20);
-      this.player.step += dt * 11;
-      if (Math.abs(dx) > Math.abs(dy)) this.player.dir = dx > 0 ? "right" : "left";
-      else this.player.dir = dy > 0 ? "down" : "up";
+
+    if (!this.player.moving) return;
+    const nextX = this.player.x + dx * C.PLAYER_SPEED * dt;
+    if (!isWorldPositionBlocked(nextX, this.player.y, PLAYER_RADIUS)) this.player.x = nextX;
+    const nextY = this.player.y + dy * C.PLAYER_SPEED * dt;
+    if (!isWorldPositionBlocked(this.player.x, nextY, PLAYER_RADIUS)) this.player.y = nextY;
+    this.player.step += dt * 11;
+    if (Math.abs(dx) > Math.abs(dy)) this.player.dir = dx > 0 ? "right" : "left";
+    else this.player.dir = dy > 0 ? "down" : "up";
+  }
+
+  tryAttack(kind) {
+    if (!this.running || !this.inputEnabled || this.player.respawnTimer > 0 || this.attackState) return;
+    const definition = attackDefinition(kind);
+    const cooldown = kind === "strong" ? this.strongCooldown : this.basicCooldown;
+    if (cooldown > 0) {
+      if (kind === "strong") this.notify(`강한 공격 재사용까지 ${cooldown.toFixed(1)}초`);
+      return;
+    }
+    if (this.player.mp < definition.mpCost) {
+      this.notify("강한 공격에 필요한 MP가 부족합니다.");
+      return;
     }
 
+    this.player.mp -= definition.mpCost;
+    if (kind === "strong") this.strongCooldown = definition.cooldown;
+    else this.basicCooldown = definition.cooldown;
+    this.attackState = { kind, elapsed: 0, applied: false, definition };
+    this.player.moving = false;
+    this.updateHud();
+  }
+
+  updateAttack(dt) {
+    if (!this.attackState) return;
+    this.attackState.elapsed += dt;
+    if (!this.attackState.applied && this.attackState.elapsed >= this.attackState.definition.windup) {
+      this.attackState.applied = true;
+      this.applyAttackHits(this.attackState.definition);
+    }
+    if (this.attackState.elapsed >= this.attackState.definition.duration) this.attackState = null;
+  }
+
+  applyAttackHits(definition) {
+    const knockbackDirection = directionVector(this.player.dir);
+    for (const slime of this.slimes) {
+      if (slime.state === "dying") continue;
+      if (!isTargetInAttackArc(this.player, this.player.dir, slime, definition.range, definition.arcDegrees)) continue;
+      const result = damageSlime(slime, definition.damage, knockbackDirection, definition.knockback);
+      if (result.damageNumber) {
+        this.damageNumbers.push({ ...result.damageNumber, age: 0, duration: 0.55 });
+      }
+    }
+  }
+
+  applySlimeContactDamage() {
+    for (const slime of this.slimes) {
+      if (slime.state === "dying" || slime.contactCooldown > 0) continue;
+      const dx = this.player.x - slime.x;
+      const dy = this.player.y - slime.y;
+      if (Math.hypot(dx, dy) >= slime.radius + PLAYER_RADIUS) continue;
+      const result = this.damagePlayer(10, slime);
+      if (result.applied) slime.contactCooldown = 1;
+      if (result.died) break;
+    }
+  }
+
+  damagePlayer(amount, source) {
+    const result = applyPlayerDamage(this.player, amount);
+    if (!result.applied) return result;
+
+    const dx = this.player.x - source.x;
+    const dy = this.player.y - source.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const pushX = dx / length * 34;
+    const pushY = dy / length * 34;
+    const nextX = this.player.x + pushX;
+    if (!isWorldPositionBlocked(nextX, this.player.y, PLAYER_RADIUS)) this.player.x = nextX;
+    const nextY = this.player.y + pushY;
+    if (!isWorldPositionBlocked(this.player.x, nextY, PLAYER_RADIUS)) this.player.y = nextY;
+
+    if (result.died) {
+      this.inputEnabled = false;
+      this.keys.clear();
+      this.attackState = null;
+      this.player.moving = false;
+      this.ui.respawnOverlay.hidden = false;
+    }
+    return result;
+  }
+
+  finishRespawn() {
+    respawnPlayer(this.player);
+    const targetX = clamp(SPAWN.x - innerWidth / 2, 0, Math.max(0, C.WORLD_WIDTH - innerWidth));
+    const targetY = clamp(SPAWN.y - innerHeight / 2, 0, Math.max(0, C.WORLD_HEIGHT - innerHeight));
+    this.camera.x = targetX;
+    this.camera.y = targetY;
+    this.camera.prevX = targetX;
+    this.camera.prevY = targetY;
+    this.ui.respawnOverlay.hidden = true;
+    this.inputEnabled = true;
+    this.notify("다시 모험을 시작합니다.");
+  }
+
+  resetCombatState() {
+    respawnPlayer(this.player);
+    this.player.moving = false;
+    this.slimes = createSlimes();
+    this.attackState = null;
+    this.basicCooldown = 0;
+    this.strongCooldown = 0;
+    this.damageNumbers = [];
+    this.ui.respawnOverlay.hidden = true;
+    this.updateHud();
+  }
+
+  updateDamageNumbers(dt) {
+    for (const number of this.damageNumbers) {
+      number.age += dt;
+      number.y -= 24 * dt;
+    }
+    this.damageNumbers = this.damageNumbers.filter(number => number.age < number.duration);
+  }
+
+  updateCamera(dt) {
     const targetX = clamp(this.player.x - innerWidth / 2, 0, Math.max(0, C.WORLD_WIDTH - innerWidth));
     const targetY = clamp(this.player.y - innerHeight / 2, 0, Math.max(0, C.WORLD_HEIGHT - innerHeight));
     const cameraFactor = 1 - Math.exp(-C.CAMERA_LERP * dt);
     this.camera.x += (targetX - this.camera.x) * cameraFactor;
     this.camera.y += (targetY - this.camera.y) * cameraFactor;
+  }
 
-    this.network?.publish(this.player);
-    this.updateRemoteInterpolation(dt);
+  updateMessage(dt) {
+    if (this.messageTimer <= 0) return;
+    this.messageTimer -= dt;
+    if (this.messageTimer <= 0) this.ui.message.classList.remove("show");
+  }
 
-    if (this.messageTimer > 0) {
-      this.messageTimer -= dt;
-      if (this.messageTimer <= 0) this.ui.message.classList.remove("show");
-    }
-
+  updateBiome() {
     const biome = getBiome(this.player.x, this.player.y);
     const subtitle = this.ui.playerSubtitle;
     if (subtitle.dataset.biome !== biome) {
       subtitle.dataset.biome = biome;
       subtitle.textContent = `LV. 1 · ${biome}`;
     }
+  }
+
+  updateHud() {
+    this.ui.hpText.textContent = `${Math.ceil(this.player.hp)} / ${this.player.maxHp}`;
+    this.ui.mpText.textContent = `${Math.ceil(this.player.mp)} / ${this.player.maxMp}`;
+    this.ui.hpBar.style.transform = `scaleX(${this.player.hp / this.player.maxHp})`;
+    this.ui.mpBar.style.transform = `scaleX(${this.player.mp / this.player.maxMp})`;
+
+    const unavailable = this.strongCooldown > 0 || this.player.mp < 20 || this.player.respawnTimer > 0;
+    this.ui.strongSlot.classList.toggle("unavailable", unavailable);
+    this.ui.strongCooldown.textContent = this.strongCooldown > 0 ? this.strongCooldown.toFixed(1) : "";
   }
 
   render(alpha) {
@@ -207,21 +393,39 @@ export class PixelRPG {
     );
 
     const entities = [];
-    this.remotePlayers.forEach(remote => entities.push({ ...remote, remote: true }));
+    this.remotePlayers.forEach(remote => entities.push({ ...remote, entityType: "player", remote: true }));
+    this.slimes.forEach(slime => entities.push({ entityType: "slime", slime, x: slime.x, y: slime.y }));
     entities.push({
       ...this.player,
       x: lerp(this.player.prevX, this.player.x, alpha),
       y: lerp(this.player.prevY, this.player.y, alpha),
+      entityType: "player",
       remote: false,
     });
     entities.sort((a, b) => a.y - b.y);
 
     for (const entity of entities) {
       if (entity.x < cameraX - 60 || entity.x > cameraX + viewW + 60 || entity.y < cameraY - 80 || entity.y > cameraY + viewH + 80) continue;
-      drawPixelCharacter(ctx, entity, cameraX, cameraY);
+      if (entity.entityType === "slime") drawSlime(ctx, entity.slime, cameraX, cameraY, alpha);
+      else drawPixelCharacter(ctx, entity, cameraX, cameraY, entity.remote ? null : this.attackState);
     }
 
+    if (this.attackState) drawAttackEffect(ctx, this.player, this.attackState, cameraX, cameraY, alpha);
+    this.drawDamageNumbers(ctx, cameraX, cameraY);
     this.renderMinimap();
+  }
+
+  drawDamageNumbers(ctx, cameraX, cameraY) {
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.font = "900 15px sans-serif";
+    for (const number of this.damageNumbers) {
+      const progress = number.age / number.duration;
+      ctx.globalAlpha = 1 - progress;
+      ctx.fillStyle = number.value >= 3 ? "#fde047" : "#ffffff";
+      ctx.fillText(`-${number.value}`, Math.round(number.x - cameraX), Math.round(number.y - cameraY));
+    }
+    ctx.restore();
   }
 
   receiveRemotePlayers(players) {
@@ -284,7 +488,8 @@ export class PixelRPG {
   }
 
   measurePerformance(timestamp, frameSeconds) {
-    if (frameSeconds > 0) this.fpsSamples.push(1 / frameSeconds);
+    const fpsSample = fpsSampleFromFrameSeconds(frameSeconds);
+    if (fpsSample !== null) this.fpsSamples.push(fpsSample);
     if (this.fpsSamples.length > 120) this.fpsSamples.shift();
     if (timestamp - this.lastFpsUpdate < 500) return;
     this.lastFpsUpdate = timestamp;
@@ -324,12 +529,13 @@ export class PixelRPG {
       context.fillStyle = color;
       context.fillRect(Math.round(x / C.WORLD_WIDTH * width - size / 2), Math.round(y / C.WORLD_HEIGHT * height - size / 2), size, size);
     };
+    this.slimes.forEach(slime => drawDot(slime.x, slime.y, "#4ade80", 4));
     this.remotePlayers.forEach(player => drawDot(player.x, player.y, "#f8fafc", 3));
     drawDot(this.player.x, this.player.y, "#ff4d6d", 5);
   }
 }
 
-function drawPixelCharacter(ctx, player, cameraX, cameraY) {
+function drawPixelCharacter(ctx, player, cameraX, cameraY, attackState = null) {
   const x = Math.round(player.x - cameraX);
   const y = Math.round(player.y - cameraY);
   const bob = player.moving ? Math.sin(player.step) * 1.6 : 0;
@@ -341,13 +547,13 @@ function drawPixelCharacter(ctx, player, cameraX, cameraY) {
   ctx.fillStyle = "#5b3b2a";
   ctx.fillRect(-9, 6, 7, 12);
   ctx.fillRect(2, 6, 7, 12);
-  ctx.fillStyle = "#b88a4e";
+  ctx.fillStyle = player.hitFlash > 0 ? "#ef4444" : "#b88a4e";
   ctx.fillRect(-10, -9, 20, 18);
-  ctx.fillStyle = player.color || "#4f8e5b";
+  ctx.fillStyle = player.hitFlash > 0 ? "#fca5a5" : player.color || "#4f8e5b";
   ctx.fillRect(-14, -11, 6, 20);
   ctx.fillRect(8, -11, 6, 20);
   ctx.fillRect(-12, -14, 24, 5);
-  ctx.fillStyle = "#f0c39a";
+  ctx.fillStyle = player.hitFlash > 0 ? "#fecaca" : "#f0c39a";
   ctx.fillRect(-9, -24, 18, 14);
   ctx.fillStyle = "#493329";
   ctx.fillRect(-10, -27, 20, 7);
@@ -356,10 +562,7 @@ function drawPixelCharacter(ctx, player, cameraX, cameraY) {
   if (player.dir === "left") ctx.fillRect(-7, -18, 2, 2);
   else if (player.dir === "right") ctx.fillRect(5, -18, 2, 2);
   else { ctx.fillRect(-5, -18, 2, 2); ctx.fillRect(3, -18, 2, 2); }
-  ctx.fillStyle = "#dceeff";
-  ctx.fillRect(11, -4, 4, 19);
-  ctx.fillStyle = "#6b4b2f";
-  ctx.fillRect(9, 11, 8, 4);
+  drawSword(ctx, player.dir, attackState);
 
   if (player.remote) {
     const name = sanitizeName(player.name);
@@ -370,6 +573,51 @@ function drawPixelCharacter(ctx, player, cameraX, cameraY) {
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center";
     ctx.fillText(name, 0, -33);
+  }
+  ctx.restore();
+}
+
+function drawSword(ctx, direction, attackState) {
+  const baseAngle = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 }[direction] || 0;
+  const progress = attackState ? clamp(attackState.elapsed / attackState.definition.duration, 0, 1) : 0.5;
+  const swingSize = attackState?.kind === "strong" ? 2.2 : 1.45;
+  const swing = attackState ? -swingSize / 2 + progress * swingSize : 0.55;
+  ctx.save();
+  ctx.rotate(baseAngle + swing);
+  ctx.fillStyle = "#6b4b2f";
+  ctx.fillRect(7, -4, 9, 8);
+  ctx.fillStyle = attackState?.kind === "strong" ? "#fde68a" : "#dceeff";
+  ctx.fillRect(14, -2, attackState?.kind === "strong" ? 27 : 21, 4);
+  ctx.fillStyle = "#f8fafc";
+  ctx.fillRect(18, -1, attackState?.kind === "strong" ? 20 : 15, 2);
+  ctx.restore();
+}
+
+function drawAttackEffect(ctx, player, attackState, cameraX, cameraY, alpha) {
+  const x = lerp(player.prevX, player.x, alpha) - cameraX;
+  const y = lerp(player.prevY, player.y, alpha) - cameraY;
+  const definition = attackState.definition;
+  const baseAngle = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 }[player.dir] || 0;
+  const halfArc = definition.arcDegrees * Math.PI / 360;
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  ctx.lineCap = "square";
+  if (attackState.elapsed < definition.windup) {
+    const charge = definition.windup ? attackState.elapsed / definition.windup : 1;
+    ctx.globalAlpha = 0.3 + charge * 0.5;
+    ctx.strokeStyle = "#fde047";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, 24 + charge * 10, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    const activeProgress = clamp((attackState.elapsed - definition.windup) / Math.max(0.01, definition.duration - definition.windup), 0, 1);
+    ctx.globalAlpha = 1 - activeProgress * 0.75;
+    ctx.strokeStyle = attackState.kind === "strong" ? "#fde047" : "#e0f2fe";
+    ctx.lineWidth = attackState.kind === "strong" ? 10 : 6;
+    ctx.beginPath();
+    ctx.arc(0, 0, definition.range * (0.72 + activeProgress * 0.28), baseAngle - halfArc, baseAngle + halfArc);
+    ctx.stroke();
   }
   ctx.restore();
 }

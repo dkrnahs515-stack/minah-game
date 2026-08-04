@@ -41,6 +41,13 @@
   </div>
 
   <div id="hud" class="hud" aria-live="polite" hidden>
+    <section id="respawnOverlay" class="respawn-overlay" hidden>
+      <div>
+        <strong>쓰러졌습니다</strong>
+        <span>잠시 후 중앙 초원에서 부활합니다.</span>
+      </div>
+    </section>
+
     <section class="player-panel glass">
       <div class="player-header">
         <div>
@@ -72,15 +79,21 @@
     </section>
 
     <section class="controls glass">
-      <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>이동</span></div>
-      <div><kbd>Q</kbd><kbd>E</kbd><kbd>R</kbd><span>스킬</span></div>
+      <div><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd><span>이동</span></div>
+      <div><kbd>Ctrl</kbd><span>기본 공격</span></div>
+      <div><kbd>Q</kbd><span>강한 공격</span></div>
+      <div><kbd>E</kbd><kbd>R</kbd><span>빈 스킬</span></div>
       <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><span>아이템</span></div>
       <div><kbd>Esc</kbd><span>나가기</span></div>
     </section>
 
     <section class="hotbar" aria-label="단축키 슬롯">
       <div class="slot-group glass">
-        <button class="slot" data-code="KeyQ" type="button"><span class="key">Q</span><span class="slot-type">SKILL</span><span class="empty">비어 있음</span></button>
+        <button id="strongSlot" class="slot strong" data-code="KeyQ" type="button">
+          <span class="key">Q</span><span class="slot-type">SKILL</span>
+          <span class="skill-name">강한 공격</span><span class="skill-cost">MP 20</span>
+          <span id="strongCooldown" class="cooldown"></span>
+        </button>
         <button class="slot" data-code="KeyE" type="button"><span class="key">E</span><span class="slot-type">SKILL</span><span class="empty">비어 있음</span></button>
         <button class="slot" data-code="KeyR" type="button"><span class="key">R</span><span class="slot-type">SKILL</span><span class="empty">비어 있음</span></button>
       </div>

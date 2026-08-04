@@ -58,7 +58,7 @@ firebase login
 firebase init hosting:github
 ```
 
-저장소는 `dkrnahs515-stack/minah-game`, 배포 브랜치는 `main`을 선택합니다.
+저장소는 `dkrnahs515-stack/pixel_world`, 배포 브랜치는 `main`을 선택합니다.
 
 ## 5. 수동 배포
 

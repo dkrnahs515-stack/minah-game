@@ -54,8 +54,19 @@ kbd { min-width: 23px; padding: 2px 5px; border: 1px solid rgba(255,255,255,.35)
 .slot .key { position: absolute; top: 4px; left: 6px; font-size: 15px; font-weight: 900; }
 .slot-type { position: absolute; top: 6px; right: 6px; color: var(--muted); font-size: 8px; letter-spacing: .08em; }
 .slot .empty { position: absolute; inset: auto 0 10px; color: #aab6c7; font-size: 10px; }
+.slot .skill-name { position: absolute; inset: 27px 3px auto; font-size: 10px; font-weight: 900; }
+.slot .skill-cost { position: absolute; inset: auto 3px 6px; color: #c4b5fd; font-size: 9px; font-weight: 800; }
+.slot .cooldown { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 8px; background: rgba(3,7,18,.68); color: #fff; font-size: 22px; font-weight: 900; }
+.slot .cooldown:empty { display: none; }
+.slot.unavailable { filter: grayscale(.6) brightness(.72); }
+.slot.unavailable:hover { transform: none; filter: grayscale(.6) brightness(.78); }
 .slot.flash { animation: slotFlash .24s ease; }
 @keyframes slotFlash { 45% { transform: scale(.91); box-shadow: 0 0 22px rgba(255,255,255,.7); filter: brightness(1.45); } }
+
+.respawn-overlay { position: absolute; inset: 0; z-index: 25; display: grid; place-items: center; background: radial-gradient(circle,rgba(76,5,25,.2),rgba(2,6,15,.78)); }
+.respawn-overlay div { padding: 22px 30px; border: 1px solid rgba(248,113,113,.42); border-radius: 16px; background: rgba(15,23,42,.88); text-align: center; }
+.respawn-overlay strong { display: block; color: #fecaca; font-size: 27px; }
+.respawn-overlay span { display: block; margin-top: 7px; color: #cbd5e1; font-size: 13px; }
 
 .screen-overlay { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: radial-gradient(circle at 50% 32%, rgba(46,125,82,.25), transparent 32%), linear-gradient(rgba(8,14,25,.74), rgba(8,14,25,.94)); backdrop-filter: blur(6px); }
 .confirmation-overlay { z-index: 40; background: rgba(5,9,17,.76); }

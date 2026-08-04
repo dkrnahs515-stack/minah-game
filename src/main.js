@@ -14,6 +14,9 @@ const elements = {
   message: document.querySelector("#message"),
   playerSubtitle: document.querySelector(".player-header small"),
   playerName: document.querySelector("#playerName"),
+  respawnOverlay: document.querySelector("#respawnOverlay"),
+  strongSlot: document.querySelector("#strongSlot"),
+  strongCooldown: document.querySelector("#strongCooldown"),
 };
 
 const game = new PixelRPG(elements);
