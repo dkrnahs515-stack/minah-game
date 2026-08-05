@@ -23,11 +23,11 @@
 
 ## 구현 커밋
 
-- `254c923`: 전체 채팅 상태 로직
-- `6d221d3`: 말풍선 화면 경계 배치
-- `223e439`: Firebase 전체 채팅 동기화와 보안 규칙
-- `4e5217d`: 전체 채팅 UI 컨트롤러
-- `2bd705e`: 플레이어 채팅 말풍선 통합
+- `c945e94`: 전체 채팅 상태 로직
+- `c079472`: 말풍선 화면 경계 배치
+- `dfd356b`: Firebase 전체 채팅 동기화와 보안 규칙
+- `1ed3768`: 전체 채팅 UI 컨트롤러
+- `50441f3`: 플레이어 채팅 말풍선 통합
 
 ## 전체 공통 제약사항
 
@@ -44,7 +44,7 @@
 - 패키지 관리자, 번들러, 영구 채팅 기록, 개인 메시지, 서버형 운영 도구, 파일 업로드, 신규 서버 런타임은 추가하지 않습니다.
 - 기존 닉네임 입장, 나가기, 포탈, 전투, 부활, 144Hz 시뮬레이션, Firebase 플레이어 동기화 기능을 그대로 보존합니다.
 - Firebase Admin/서비스 계정 키 또는 다른 실제 비밀정보를 추적 파일, 변경 내역, 테스트, 문서, 로그에 추가하면 안 됩니다. 최종 보고에서는 공개가 전제된 Firebase 웹 API 식별자와 실제 관리자 자격 증명을 구분하고, 콘솔에서만 확인 가능한 항목은 미확인으로 표시합니다.
-- 로컬 채팅 브랜치는 트리 커밋 `5427a9d`에서 시작합니다. 원격 `main`에는 동일한 월드 트리가 다른 SHA의 스쿼시 커밋으로 포함되어 있으므로 로컬 변경 범위는 `git diff 5427a9d...HEAD`로 검토합니다.
+- 채팅 브랜치는 원격 `main`의 10배 월드 스쿼시 커밋 `3c7a74e` 위에 정렬되어 있습니다. 변경 범위는 `git diff origin/main...HEAD`로 검토합니다.
 
 ---
 
@@ -1392,7 +1392,7 @@ $historyHits | Sort-Object -Unique
 ```powershell
 git diff --check
 git status -sb
-git diff --stat 5427a9d...HEAD
+git diff --stat origin/main...HEAD
 rg -n "firebaseServiceAccount|FIREBASE_SERVICE_ACCOUNT" .github/workflows
 ```
 
