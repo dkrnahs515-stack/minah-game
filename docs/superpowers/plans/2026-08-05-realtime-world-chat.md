@@ -1,48 +1,48 @@
-# Pixel World Realtime World Chat Implementation Plan
+# 픽셀 월드 실시간 전체 채팅 구현 계획
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **에이전트 작업자 안내:** 필수 하위 스킬인 `superpowers:subagent-driven-development`(추천) 또는 `superpowers:executing-plans`를 사용해 이 계획을 작업 단위로 구현합니다. 각 단계는 진행 상황을 추적할 수 있도록 체크박스(`- [ ]`) 형식을 사용합니다.
 
-**Goal:** Add a Firebase-backed global chat with a bottom-left message panel, Enter-to-chat controls, four-second player speech bubbles, and automatic removal of each player's messages when they disconnect.
+**목표:** Firebase 기반 전체 월드 채팅을 추가하고, 왼쪽 아래 메시지 패널·Enter 채팅 조작·4초간 표시되는 플레이어 말풍선·접속 종료 시 해당 플레이어 메시지 자동 삭제를 구현합니다.
 
-**Architecture:** Pure modules own chat validation, message ordering, pruning, and screen-space bubble layout. A Firebase chat adapter reuses the existing authenticated app/database connection and stores at most five messages per connected UID, while a DOM controller owns chat focus and rendering. `PixelRPG` coordinates the controller, network callbacks, input suppression, and Canvas bubble rendering without changing the existing nickname, exit, portal, combat, or region-filtered player flows.
+**구조:** 순수 모듈이 채팅 검증·메시지 정렬·오래된 메시지 정리·화면 좌표 기반 말풍선 배치를 담당합니다. Firebase 채팅 어댑터는 기존 인증 앱과 데이터베이스 연결을 재사용해 접속 중인 UID마다 메시지를 최대 5개 저장하고, DOM 컨트롤러는 채팅 포커스와 화면 표시를 담당합니다. `PixelRPG`는 기존 닉네임·나가기·포탈·전투·지역별 플레이어 표시 흐름을 변경하지 않으면서 컨트롤러, 네트워크 콜백, 게임 입력 차단, Canvas 말풍선 렌더링을 조정합니다.
 
-**Tech Stack:** HTML5 Canvas, native JavaScript ES modules, Firebase Authentication/Realtime Database 12.16.0, Node.js `node:test`, Playwright browser smoke tests, GitHub Pages/Firebase Hosting.
+**기술 구성:** HTML5 Canvas, 네이티브 JavaScript ES 모듈, Firebase Authentication/Realtime Database 12.16.0, Node.js `node:test`, Playwright 브라우저 스모크 테스트, GitHub Pages/Firebase Hosting.
 
-## Global Constraints
+## 전체 공통 제약사항
 
-- Chat scope is the entire `public` room across `village`, `volcano`, `forest`, and `coast`.
-- The chat panel shows at most 50 valid messages; each connected UID stores at most 5 server messages.
-- Messages are normalized to single spaces, must contain 1–80 Unicode characters, and may not immediately duplicate the sender's previous message.
-- A sender must wait 1 second between successful messages.
-- The input opens with `Enter`, sends with `Enter`, and cancels with `Escape`; game movement and attacks are suppressed while it is focused.
-- `Escape` closes chat before it may open the existing exit confirmation.
-- Speech bubbles last 4 seconds and only render for characters visible in the active region; the panel remains global.
-- Bubble width is `min(240px, viewportWidth × 0.45)`, with at most 4 lines, an 8px viewport margin, Unicode-safe ellipsis, vertical placement reversal, and a tail clamped 12px from box corners.
-- Canvas render quality scaling must not change logical bubble text/box size; future camera zoom only scales the world-space anchor.
-- Normal exit and `onDisconnect()` remove `rooms/{roomId}/chat/{uid}`.
-- No package manager, bundler, permanent history, private messages, moderation backend, uploads, or new server runtime is added.
-- Existing nickname entry, exit, portals, combat, respawn, 144Hz simulation, and Firebase player synchronization remain intact.
-- No Firebase Admin/service-account key or other real secret may be added to tracked files, diffs, tests, docs, or logs. The final report must distinguish the expected Firebase Web API identifier from genuine admin credentials and mark console-only checks as unverified.
-- The local chat branch starts from tree commit `5427a9d`; use `git diff 5427a9d...HEAD` for local scope review because remote `main` contains the equivalent world tree as a squash commit with a different SHA.
+- 채팅 범위는 `village`, `volcano`, `forest`, `coast` 전 지역이 공유하는 `public` 방 전체입니다.
+- 채팅 패널에는 유효한 메시지를 최대 50개 표시하며, 접속 중인 UID별 서버 메시지는 최대 5개 저장합니다.
+- 메시지의 연속 공백은 하나로 정규화하고 1~80개의 유니코드 문자만 허용하며, 자신이 직전에 보낸 메시지와 같은 내용을 연속 전송할 수 없습니다.
+- 메시지를 성공적으로 보낸 뒤 다음 전송까지 1초를 기다려야 합니다.
+- `Enter`로 입력창을 열고 다시 `Enter`로 전송하며 `Escape`로 취소합니다. 입력창에 포커스가 있는 동안에는 게임 이동과 공격 입력을 차단합니다.
+- `Escape`는 기존 나가기 확인창을 열기 전에 채팅 입력창을 먼저 닫습니다.
+- 말풍선은 4초 동안 유지되며 현재 지역에서 보이는 캐릭터에만 표시합니다. 채팅 패널의 내용은 전 지역 공통으로 유지합니다.
+- 말풍선 너비는 `min(240px, viewportWidth × 0.45)`이고 최대 4줄, 화면 가장자리 8px 여백, 유니코드 안전 말줄임표, 상하 배치 반전, 상자 모서리에서 12px 떨어지도록 제한한 말꼬리를 적용합니다.
+- Canvas 렌더 품질 배율이 논리적 말풍선 글자와 상자 크기를 바꾸면 안 됩니다. 향후 카메라 줌은 월드 좌표 기준 앵커에만 적용합니다.
+- 정상적인 나가기와 `onDisconnect()` 모두 `rooms/{roomId}/chat/{uid}`를 삭제합니다.
+- 패키지 관리자, 번들러, 영구 채팅 기록, 개인 메시지, 서버형 운영 도구, 파일 업로드, 신규 서버 런타임은 추가하지 않습니다.
+- 기존 닉네임 입장, 나가기, 포탈, 전투, 부활, 144Hz 시뮬레이션, Firebase 플레이어 동기화 기능을 그대로 보존합니다.
+- Firebase Admin/서비스 계정 키 또는 다른 실제 비밀정보를 추적 파일, 변경 내역, 테스트, 문서, 로그에 추가하면 안 됩니다. 최종 보고에서는 공개가 전제된 Firebase 웹 API 식별자와 실제 관리자 자격 증명을 구분하고, 콘솔에서만 확인 가능한 항목은 미확인으로 표시합니다.
+- 로컬 채팅 브랜치는 트리 커밋 `5427a9d`에서 시작합니다. 원격 `main`에는 동일한 월드 트리가 다른 SHA의 스쿼시 커밋으로 포함되어 있으므로 로컬 변경 범위는 `git diff 5427a9d...HEAD`로 검토합니다.
 
 ---
 
-### Task 1: Pure Chat State, Validation, Ordering, and Pruning
+### 작업 1: 순수 채팅 상태, 검증, 정렬, 메시지 정리
 
-**Files:**
-- Create: `src/chat-state.js`
-- Create: `tests/chat-state.test.mjs`
+**파일:**
+- 생성: `src/chat-state.js`
+- 생성: `tests/chat-state.test.mjs`
 
-**Interfaces:**
-- Consumes: `WORLD_IDS` from `src/world-data.js`
-- Produces: `CHAT_LIMITS: { maxCharacters: 80, panelMessages: 50, messagesPerPlayer: 5, cooldownMs: 1000, bubbleDurationMs: 4000 }`
-- Produces: `normalizeChatText(value): string`
-- Produces: `validateChatDraft(value, previousText): { ok: boolean, text: string, error: string }`
-- Produces: `flattenChatMessages(raw, limit?): Array<ChatMessage>`
-- Produces: `messageIdsToPrune(rawUserMessages, limit?): string[]`
-- Produces: `latestBubblesByUid(messages, options): Map<string, ChatMessage>`
+**인터페이스:**
+- 사용: `src/world-data.js`의 `WORLD_IDS`
+- 제공: `CHAT_LIMITS: { maxCharacters: 80, panelMessages: 50, messagesPerPlayer: 5, cooldownMs: 1000, bubbleDurationMs: 4000 }`
+- 제공: `normalizeChatText(value): string`
+- 제공: `validateChatDraft(value, previousText): { ok: boolean, text: string, error: string }`
+- 제공: `flattenChatMessages(raw, limit?): Array<ChatMessage>`
+- 제공: `messageIdsToPrune(rawUserMessages, limit?): string[]`
+- 제공: `latestBubblesByUid(messages, options): Map<string, ChatMessage>`
 
-- [ ] **Step 1: Write failing tests for normalization, validation, flattening, pruning, and bubble selection**
+- [ ] **1단계: 정규화·검증·평탄화·오래된 메시지 정리·말풍선 선택 실패 테스트 작성**
 
 ```js
 // tests/chat-state.test.mjs
@@ -57,12 +57,12 @@ import {
   validateChatDraft,
 } from "../src/chat-state.js";
 
-test("chat text normalizes whitespace without splitting Unicode characters", () => {
+test("채팅 문자열은 유니코드 문자를 나누지 않고 공백을 정규화한다", () => {
   assert.equal(normalizeChatText("  안녕\n\t월드 😀  "), "안녕 월드 😀");
   assert.equal(Array.from(normalizeChatText("😀".repeat(90))).length, CHAT_LIMITS.maxCharacters);
 });
 
-test("draft validation rejects empty and immediate duplicate messages", () => {
+test("메시지 초안 검증은 빈 문자열과 직전 메시지 중복을 거부한다", () => {
   assert.equal(validateChatDraft("   ", "").ok, false);
   assert.equal(validateChatDraft(" 안녕  월드 ", "안녕 월드").ok, false);
   assert.deepEqual(validateChatDraft(" 안녕  월드 ", "이전"), {
@@ -72,7 +72,7 @@ test("draft validation rejects empty and immediate duplicate messages", () => {
   });
 });
 
-test("nested player messages flatten globally, discard invalid records, and keep the latest 50", () => {
+test("플레이어별 중첩 메시지는 전체 목록으로 합치고 잘못된 기록을 버린 뒤 최신 50개를 유지한다", () => {
   const raw = {};
   for (let index = 0; index < 55; index++) {
     const uid = `u${index % 3}`;
@@ -92,7 +92,7 @@ test("nested player messages flatten globally, discard invalid records, and keep
   assert.equal(messages.at(-1).uid, "u0");
 });
 
-test("per-player pruning removes the oldest ids after five messages", () => {
+test("플레이어별 메시지 정리는 5개를 초과한 가장 오래된 ID를 반환한다", () => {
   const raw = Object.fromEntries(Array.from({ length: 7 }, (_, index) => [
     `m${index}`,
     { text: `m${index}`, name: "별", mapId: "village", createdAt: 100 + index },
@@ -100,7 +100,7 @@ test("per-player pruning removes the oldest ids after five messages", () => {
   assert.deepEqual(messageIdsToPrune(raw), ["m0", "m1"]);
 });
 
-test("latest bubbles include only fresh messages from the active map", () => {
+test("최신 말풍선은 현재 지역의 유효 시간이 남은 메시지만 포함한다", () => {
   const messages = [
     { uid: "a", id: "1", text: "old", name: "A", mapId: "village", createdAt: 1000 },
     { uid: "a", id: "2", text: "new", name: "A", mapId: "village", createdAt: 4500 },
@@ -112,13 +112,13 @@ test("latest bubbles include only fresh messages from the active map", () => {
 });
 ```
 
-- [ ] **Step 2: Run the chat-state tests and verify the missing module failure**
+- [ ] **2단계: 채팅 상태 테스트를 실행해 모듈 누락으로 실패하는지 확인**
 
-Run: `node --test tests/chat-state.test.mjs`
+실행: `node --test tests/chat-state.test.mjs`
 
-Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `src/chat-state.js`.
+예상 결과: `src/chat-state.js`에 대한 `ERR_MODULE_NOT_FOUND` 오류로 실패합니다.
 
-- [ ] **Step 3: Implement the pure chat-state module**
+- [ ] **3단계: 순수 채팅 상태 모듈 구현**
 
 ```js
 // src/chat-state.js
@@ -193,17 +193,17 @@ export function latestBubblesByUid(messages, {
 }
 ```
 
-- [ ] **Step 4: Run the focused and full unit suites**
+- [ ] **4단계: 해당 테스트와 전체 단위 테스트 모음 실행**
 
-Run: `node --test tests/chat-state.test.mjs`
+실행: `node --test tests/chat-state.test.mjs`
 
-Expected: 5 tests pass.
+예상 결과: 테스트 5개가 통과합니다.
 
-Run: `node --test tests/*.test.mjs`
+실행: `node --test tests/*.test.mjs`
 
-Expected: all existing tests plus the 5 chat-state tests pass.
+예상 결과: 기존 테스트와 채팅 상태 테스트 5개가 모두 통과합니다.
 
-- [ ] **Step 5: Commit the pure state boundary**
+- [ ] **5단계: 순수 상태 모듈 작업 커밋**
 
 ```powershell
 git add -- src/chat-state.js tests/chat-state.test.mjs
@@ -212,19 +212,19 @@ git commit -m "전체 채팅 상태 로직 추가"
 
 ---
 
-### Task 2: Unicode Wrapping and Viewport-Safe Bubble Layout
+### 작업 2: 유니코드 줄바꿈과 화면 경계 안전 말풍선 배치
 
-**Files:**
-- Create: `src/chat-bubble-layout.js`
-- Create: `tests/chat-bubble-layout.test.mjs`
+**파일:**
+- 생성: `src/chat-bubble-layout.js`
+- 생성: `tests/chat-bubble-layout.test.mjs`
 
-**Interfaces:**
-- Consumes: normalized message text from `chat-state.js`
-- Produces: `worldToScreen(options): { x: number, y: number }`
-- Produces: `wrapChatText(text, measureText, maxWidth, maxLines?): string[]`
-- Produces: `layoutChatBubble(options): { lines: string[], box: Rect, tail: Tail, placement: "above" | "below" }`
+**인터페이스:**
+- 사용: `chat-state.js`에서 정규화한 메시지 문자열
+- 제공: `worldToScreen(options): { x: number, y: number }`
+- 제공: `wrapChatText(text, measureText, maxWidth, maxLines?): string[]`
+- 제공: `layoutChatBubble(options): { lines: string[], box: Rect, tail: Tail, placement: "above" | "below" }`
 
-- [ ] **Step 1: Write failing tests for Korean/emoji wrapping, corners, flipping, tail clamping, and zoom anchors**
+- [ ] **1단계: 한국어·이모지 줄바꿈, 네 모서리, 상하 반전, 말꼬리 제한, 줌 앵커 실패 테스트 작성**
 
 ```js
 // tests/chat-bubble-layout.test.mjs
@@ -234,14 +234,14 @@ import { layoutChatBubble, worldToScreen, wrapChatText } from "../src/chat-bubbl
 
 const measure = text => Array.from(text).length * 10;
 
-test("wrapping keeps Unicode intact and ellipsizes after four lines", () => {
+test("줄바꿈은 유니코드를 온전히 유지하고 4줄 이후 말줄임표를 적용한다", () => {
   const lines = wrapChatText("한글 English 😀 ".repeat(12), measure, 100, 4);
   assert.equal(lines.length, 4);
   assert.equal(lines.at(-1).endsWith("…"), true);
   assert.equal(lines.join("").includes("\uFFFD"), false);
 });
 
-test("bubble stays inside every viewport edge with an eight pixel margin", () => {
+test("말풍선은 모든 화면 가장자리에서 8픽셀 여백 안쪽에 머문다", () => {
   for (const anchor of [
     { x: 1, topY: 1, bottomY: 50 },
     { x: 399, topY: 1, bottomY: 50 },
@@ -262,7 +262,7 @@ test("bubble stays inside every viewport edge with an eight pixel margin", () =>
   }
 });
 
-test("top-edge bubbles flip below and reverse the tail", () => {
+test("화면 위쪽 공간이 부족한 말풍선은 아래로 이동하고 말꼬리를 반전한다", () => {
   const layout = layoutChatBubble({
     text: "위쪽 가장자리",
     measureText: measure,
@@ -274,7 +274,7 @@ test("top-edge bubbles flip below and reverse the tail", () => {
   assert.equal(layout.tail.direction, "up");
 });
 
-test("horizontal correction keeps the tail away from rounded corners", () => {
+test("수평 위치 보정 후 말꼬리는 둥근 모서리에서 떨어진 위치를 유지한다", () => {
   const layout = layoutChatBubble({
     text: "오른쪽",
     measureText: measure,
@@ -286,7 +286,7 @@ test("horizontal correction keeps the tail away from rounded corners", () => {
   assert.ok(layout.tail.x <= layout.box.x + layout.box.width - 12);
 });
 
-test("camera zoom moves only the world anchor", () => {
+test("카메라 줌은 월드 좌표 앵커만 이동시킨다", () => {
   assert.deepEqual(worldToScreen({ worldX: 120, worldY: 80, cameraX: 20, cameraY: 10, zoom: 1.5 }), {
     x: 150,
     y: 105,
@@ -294,13 +294,13 @@ test("camera zoom moves only the world anchor", () => {
 });
 ```
 
-- [ ] **Step 2: Run the layout tests and verify the missing module failure**
+- [ ] **2단계: 배치 테스트를 실행해 모듈 누락으로 실패하는지 확인**
 
-Run: `node --test tests/chat-bubble-layout.test.mjs`
+실행: `node --test tests/chat-bubble-layout.test.mjs`
 
-Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `src/chat-bubble-layout.js`.
+예상 결과: `src/chat-bubble-layout.js`에 대한 `ERR_MODULE_NOT_FOUND` 오류로 실패합니다.
 
-- [ ] **Step 3: Implement Unicode segmentation, wrapping, and layout**
+- [ ] **3단계: 유니코드 분할, 줄바꿈, 말풍선 배치 구현**
 
 ```js
 // src/chat-bubble-layout.js
@@ -396,17 +396,17 @@ export function layoutChatBubble({ text, measureText, anchor, viewportWidth, vie
 }
 ```
 
-- [ ] **Step 4: Run layout and full unit suites**
+- [ ] **4단계: 배치 테스트와 전체 단위 테스트 모음 실행**
 
-Run: `node --test tests/chat-bubble-layout.test.mjs`
+실행: `node --test tests/chat-bubble-layout.test.mjs`
 
-Expected: 5 tests pass.
+예상 결과: 테스트 5개가 통과합니다.
 
-Run: `node --test tests/*.test.mjs`
+실행: `node --test tests/*.test.mjs`
 
-Expected: all tests pass.
+예상 결과: 모든 테스트가 통과합니다.
 
-- [ ] **Step 5: Commit the bubble layout boundary**
+- [ ] **5단계: 말풍선 배치 모듈 작업 커밋**
 
 ```powershell
 git add -- src/chat-bubble-layout.js tests/chat-bubble-layout.test.mjs
@@ -415,23 +415,23 @@ git commit -m "말풍선 화면 경계 배치 추가"
 
 ---
 
-### Task 3: Firebase Chat Adapter, Disconnect Cleanup, and Security Rules
+### 작업 3: Firebase 채팅 어댑터, 접속 종료 정리, 보안 규칙
 
-**Files:**
-- Create: `src/chat-network.js`
-- Modify: `src/network.js`
-- Modify: `database.rules.json`
-- Create: `tests/chat-network.test.mjs`
-- Create: `tests/database-rules.test.mjs`
+**파일:**
+- 생성: `src/chat-network.js`
+- 수정: `src/network.js`
+- 수정: `database.rules.json`
+- 생성: `tests/chat-network.test.mjs`
+- 생성: `tests/database-rules.test.mjs`
 
-**Interfaces:**
-- Consumes: `flattenChatMessages()` and `messageIdsToPrune()` from `chat-state.js`
-- Produces: `createOfflineChatAdapter(): ChatAdapter`
-- Produces: `createFirebaseChatAdapter(options): Promise<ChatAdapter>`
-- Changes: `createNetworkAdapter(callbacks)` returns `{ mode, uid, publish, chat, stop }`
-- `ChatAdapter.send(payload)` consumes `{ text, name, mapId }` and returns `{ ok: boolean, error: string }`
+**인터페이스:**
+- 사용: `chat-state.js`의 `flattenChatMessages()`와 `messageIdsToPrune()`
+- 제공: `createOfflineChatAdapter(): ChatAdapter`
+- 제공: `createFirebaseChatAdapter(options): Promise<ChatAdapter>`
+- 변경: `createNetworkAdapter(callbacks)`가 `{ mode, uid, publish, chat, stop }`을 반환
+- `ChatAdapter.send(payload)`는 `{ text, name, mapId }`를 받아 `{ ok: boolean, error: string }`을 반환
 
-- [ ] **Step 1: Write failing adapter tests with an injected Firebase module fake**
+- [ ] **1단계: 주입한 Firebase 가짜 모듈을 사용하는 어댑터 실패 테스트 작성**
 
 ```js
 // tests/chat-network.test.mjs
@@ -460,14 +460,14 @@ function fakeFirebase(initial = {}) {
   return { module, writes, removes, emit: value => listener({ val: () => value }) };
 }
 
-test("offline adapter rejects send without throwing", async () => {
+test("오프라인 어댑터는 예외 없이 메시지 전송을 거부한다", async () => {
   assert.deepEqual(await createOfflineChatAdapter().send({ text: "hello" }), {
     ok: false,
     error: "채팅 서버가 오프라인입니다.",
   });
 });
 
-test("firebase adapter subscribes globally, writes under its uid, and removes its subtree on stop", async () => {
+test("Firebase 어댑터는 전체 채팅을 구독하고 자신의 UID 아래에 기록하며 종료 시 하위 트리를 삭제한다", async () => {
   const fake = fakeFirebase();
   const received = [];
   const adapter = await createFirebaseChatAdapter({
@@ -484,7 +484,7 @@ test("firebase adapter subscribes globally, writes under its uid, and removes it
 });
 ```
 
-- [ ] **Step 2: Write a failing structural test for chat security rules**
+- [ ] **2단계: 채팅 보안 규칙 구조 실패 테스트 작성**
 
 ```js
 // tests/database-rules.test.mjs
@@ -492,7 +492,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("chat rules require auth, uid ownership, bounded text, valid maps, and no extra fields", async () => {
+test("채팅 규칙은 인증·UID 소유권·문자 수 제한·유효한 지역·추가 필드 금지를 요구한다", async () => {
   const rules = JSON.parse(await readFile(new URL("../database.rules.json", import.meta.url), "utf8"));
   const chat = rules.rules.rooms.$roomId.chat;
   const message = chat.$uid.$messageId;
@@ -504,13 +504,13 @@ test("chat rules require auth, uid ownership, bounded text, valid maps, and no e
 });
 ```
 
-- [ ] **Step 3: Run the focused tests and verify missing adapter/rules failures**
+- [ ] **3단계: 관련 테스트를 실행해 어댑터와 규칙 누락으로 실패하는지 확인**
 
-Run: `node --test tests/chat-network.test.mjs tests/database-rules.test.mjs`
+실행: `node --test tests/chat-network.test.mjs tests/database-rules.test.mjs`
 
-Expected: FAIL because `src/chat-network.js` and the `chat` rules do not exist.
+예상 결과: `src/chat-network.js`와 `chat` 규칙이 없으므로 실패합니다.
 
-- [ ] **Step 4: Implement the Firebase chat adapter with per-UID pruning and cleanup**
+- [ ] **4단계: UID별 오래된 메시지 정리와 접속 종료 정리를 포함한 Firebase 채팅 어댑터 구현**
 
 ```js
 // src/chat-network.js
@@ -572,9 +572,9 @@ export async function createFirebaseChatAdapter({ dbModule, db, uid, roomId, onM
 }
 ```
 
-- [ ] **Step 5: Integrate one authenticated Firebase connection with the chat adapter**
+- [ ] **5단계: 인증된 단일 Firebase 연결에 채팅 어댑터 통합**
 
-Replace `src/network.js` with this callback-object version so player and chat adapters share one app, database, and anonymous user:
+플레이어와 채팅 어댑터가 하나의 앱·데이터베이스·익명 사용자를 공유하도록 `src/network.js`를 다음 콜백 객체 방식으로 교체합니다.
 
 ```js
 // src/network.js
@@ -698,9 +698,9 @@ export async function createNetworkAdapter({
 }
 ```
 
-- [ ] **Step 6: Add authenticated, owner-only, field-bounded chat rules**
+- [ ] **6단계: 인증·작성자 전용·필드 제한 채팅 규칙 추가**
 
-Add this sibling next to `players` under `rooms/$roomId`:
+`rooms/$roomId` 아래의 `players`와 같은 단계에 다음 규칙을 추가합니다.
 
 ```json
 "chat": {
@@ -729,21 +729,21 @@ Add this sibling next to `players` under `rooms/$roomId`:
 }
 ```
 
-- [ ] **Step 7: Run adapter, rules, and complete unit suites**
+- [ ] **7단계: 어댑터·규칙·전체 단위 테스트 모음 실행**
 
-Run: `node --test tests/chat-network.test.mjs tests/database-rules.test.mjs`
+실행: `node --test tests/chat-network.test.mjs tests/database-rules.test.mjs`
 
-Expected: 3 focused tests pass.
+예상 결과: 관련 테스트 3개가 통과합니다.
 
-Run: `node --test tests/*.test.mjs`
+실행: `node --test tests/*.test.mjs`
 
-Expected: all tests pass.
+예상 결과: 모든 테스트가 통과합니다.
 
-Run: `Get-Content -Raw database.rules.json | ConvertFrom-Json | Out-Null`
+실행: `Get-Content -Raw database.rules.json | ConvertFrom-Json | Out-Null`
 
-Expected: PowerShell exits 0.
+예상 결과: PowerShell이 종료 코드 0으로 끝납니다.
 
-- [ ] **Step 8: Commit network and server-rule integration**
+- [ ] **8단계: 네트워크와 서버 규칙 통합 작업 커밋**
 
 ```powershell
 git add -- src/chat-network.js src/network.js database.rules.json tests/chat-network.test.mjs tests/database-rules.test.mjs
@@ -752,21 +752,21 @@ git commit -m "Firebase 전체 채팅 동기화 추가"
 
 ---
 
-### Task 4: Bottom-Left Chat UI, Enter/Escape Flow, and Offline State
+### 작업 4: 왼쪽 아래 채팅 UI, Enter/Escape 흐름, 오프라인 상태
 
-**Files:**
-- Create: `src/chat-controller.js`
-- Create: `tests/chat-controller.test.mjs`
-- Create: `tests/static-chat-ui.test.mjs`
-- Modify: `index.html`
-- Modify: `styles.css`
+**파일:**
+- 생성: `src/chat-controller.js`
+- 생성: `tests/chat-controller.test.mjs`
+- 생성: `tests/static-chat-ui.test.mjs`
+- 수정: `index.html`
+- 수정: `styles.css`
 
-**Interfaces:**
-- Produces: `chatKeyAction({ code, typing, running, exitOpen }): "open" | "cancel" | null`
-- Produces: `ChatController` methods `open()`, `cancel()`, `submit()`, `setMode()`, `renderMessages()`, `reset()`, `isTyping()`
-- Consumed later by Task 5 through `PixelRPG`: controller focus and submit methods
+**인터페이스:**
+- 제공: `chatKeyAction({ code, typing, running, exitOpen }): "open" | "cancel" | null`
+- 제공: `ChatController` 메서드 `open()`, `cancel()`, `submit()`, `setMode()`, `renderMessages()`, `reset()`, `isTyping()`
+- 작업 5에서 `PixelRPG`를 통해 사용: 컨트롤러 포커스 및 전송 메서드
 
-- [ ] **Step 1: Write failing tests for key priority and static UI structure**
+- [ ] **1단계: 키 입력 우선순위와 정적 UI 구조 실패 테스트 작성**
 
 ```js
 // tests/chat-controller.test.mjs
@@ -774,12 +774,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chatKeyAction } from "../src/chat-controller.js";
 
-test("Enter opens chat only while the game is running and exit is closed", () => {
+test("Enter는 게임 실행 중이고 나가기 확인창이 닫힌 경우에만 채팅을 연다", () => {
   assert.equal(chatKeyAction({ code: "Enter", typing: false, running: true, exitOpen: false }), "open");
   assert.equal(chatKeyAction({ code: "Enter", typing: false, running: true, exitOpen: true }), null);
 });
 
-test("Escape cancels chat before the exit dialog can open", () => {
+test("Escape는 나가기 확인창보다 채팅을 먼저 취소한다", () => {
   assert.equal(chatKeyAction({ code: "Escape", typing: true, running: true, exitOpen: false }), "cancel");
   assert.equal(chatKeyAction({ code: "Escape", typing: false, running: true, exitOpen: false }), null);
 });
@@ -791,7 +791,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("chat panel contains accessible status, message list, form, and bounded input", async () => {
+test("채팅 패널은 접근 가능한 상태·메시지 목록·입력 폼·길이 제한 입력창을 포함한다", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /id="chatPanel"/);
   assert.match(html, /id="chatMessages"/);
@@ -800,22 +800,22 @@ test("chat panel contains accessible status, message list, form, and bounded inp
   assert.match(html, /aria-live="polite"/);
 });
 
-test("chat panel is interactive and responsive from desktop to mobile", async () => {
+test("채팅 패널은 데스크톱부터 모바일까지 상호작용 가능하고 반응형으로 동작한다", async () => {
   const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
   assert.match(css, /\.chat-panel[^}]+pointer-events:\s*auto/s);
   assert.match(css, /@media \(max-width: 520px\)[\s\S]+\.chat-panel/);
 });
 ```
 
-- [ ] **Step 2: Run the controller/static tests and verify failures**
+- [ ] **2단계: 컨트롤러와 정적 UI 테스트를 실행해 실패 확인**
 
-Run: `node --test tests/chat-controller.test.mjs tests/static-chat-ui.test.mjs`
+실행: `node --test tests/chat-controller.test.mjs tests/static-chat-ui.test.mjs`
 
-Expected: FAIL because the module and markup do not exist.
+예상 결과: 모듈과 마크업이 없으므로 실패합니다.
 
-- [ ] **Step 3: Add the chat panel markup inside `#hud`**
+- [ ] **3단계: `#hud` 안에 채팅 패널 마크업 추가**
 
-Place it after `#message` and before the minimap:
+`#message` 다음, 미니맵 앞에 배치합니다.
 
 ```html
 <section id="chatPanel" class="chat-panel glass" aria-label="전체 월드 채팅">
@@ -832,7 +832,7 @@ Place it after `#message` and before the minimap:
 </section>
 ```
 
-- [ ] **Step 4: Add responsive panel styles without covering the hotbar**
+- [ ] **4단계: 단축키 표시줄을 가리지 않는 반응형 패널 스타일 추가**
 
 ```css
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
@@ -851,14 +851,14 @@ Place it after `#message` and before the minimap:
 .chat-form :disabled { cursor: not-allowed; opacity: .5; }
 ```
 
-Inside the existing `@media (max-width: 520px)` block add:
+기존 `@media (max-width: 520px)` 블록 안에 다음 내용을 추가합니다.
 
 ```css
 .chat-panel { bottom: 76px; max-height: 205px; }
 .chat-messages { height: 105px; }
 ```
 
-- [ ] **Step 5: Implement the controller with cooldown, duplicate checks, text-only rendering, and focus state**
+- [ ] **5단계: 재전송 대기·중복 검사·텍스트 전용 렌더링·포커스 상태를 포함한 컨트롤러 구현**
 
 ```js
 // src/chat-controller.js
@@ -957,17 +957,17 @@ export class ChatController {
 }
 ```
 
-- [ ] **Step 6: Run controller, static UI, and full unit suites**
+- [ ] **6단계: 컨트롤러·정적 UI·전체 단위 테스트 모음 실행**
 
-Run: `node --test tests/chat-controller.test.mjs tests/static-chat-ui.test.mjs`
+실행: `node --test tests/chat-controller.test.mjs tests/static-chat-ui.test.mjs`
 
-Expected: 4 focused tests pass.
+예상 결과: 관련 테스트 4개가 통과합니다.
 
-Run: `node --test tests/*.test.mjs`
+실행: `node --test tests/*.test.mjs`
 
-Expected: all tests pass.
+예상 결과: 모든 테스트가 통과합니다.
 
-- [ ] **Step 7: Commit the chat UI and controller**
+- [ ] **7단계: 채팅 UI와 컨트롤러 작업 커밋**
 
 ```powershell
 git add -- src/chat-controller.js index.html styles.css tests/chat-controller.test.mjs tests/static-chat-ui.test.mjs
@@ -976,20 +976,20 @@ git commit -m "전체 채팅 UI 컨트롤러 추가"
 
 ---
 
-### Task 5: Game Coordination and Canvas Speech Bubbles
+### 작업 5: 게임 흐름 연동과 Canvas 말풍선
 
-**Files:**
-- Modify: `src/game.js`
-- Modify: `src/main.js`
-- Modify: `tests/browser-smoke.cjs`
-- Create: `tests/static-chat-integration.test.mjs`
+**파일:**
+- 수정: `src/game.js`
+- 수정: `src/main.js`
+- 수정: `tests/browser-smoke.cjs`
+- 생성: `tests/static-chat-integration.test.mjs`
 
-**Interfaces:**
-- Consumes: `ChatController`, `latestBubblesByUid()`, `layoutChatBubble()`, `worldToScreen()`
-- Produces for `main.js`: `openChatInput()`, `cancelChatInput()`, `isChatTyping()`
-- Produces internal methods: `sendChat(text)`, `receiveChatMessages(messages)`, `drawChatBubble(ctx, entity, message, cameraX, cameraY)`
+**인터페이스:**
+- 사용: `ChatController`, `latestBubblesByUid()`, `layoutChatBubble()`, `worldToScreen()`
+- `main.js`에 제공: `openChatInput()`, `cancelChatInput()`, `isChatTyping()`
+- 내부 메서드 제공: `sendChat(text)`, `receiveChatMessages(messages)`, `drawChatBubble(ctx, entity, message, cameraX, cameraY)`
 
-- [ ] **Step 1: Write a failing static integration test before wiring the game**
+- [ ] **1단계: 게임 연동 전 정적 통합 실패 테스트 작성**
 
 ```js
 // tests/static-chat-integration.test.mjs
@@ -997,7 +997,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("game coordinates the controller, global messages, input suppression, and bubble overlay", async () => {
+test("게임은 컨트롤러·전체 메시지·입력 차단·말풍선 오버레이를 연동한다", async () => {
   const game = await readFile(new URL("../src/game.js", import.meta.url), "utf8");
   const main = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
   assert.match(game, /import \{ ChatController \}/);
@@ -1010,15 +1010,15 @@ test("game coordinates the controller, global messages, input suppression, and b
 });
 ```
 
-- [ ] **Step 2: Run the integration test and verify it fails**
+- [ ] **2단계: 통합 테스트를 실행해 실패 확인**
 
-Run: `node --test tests/static-chat-integration.test.mjs`
+실행: `node --test tests/static-chat-integration.test.mjs`
 
-Expected: FAIL because `game.js` and `main.js` do not yet contain chat coordination.
+예상 결과: `game.js`와 `main.js`에 채팅 연동 코드가 아직 없으므로 실패합니다.
 
-- [ ] **Step 3: Construct the chat controller and initialize game chat state**
+- [ ] **3단계: 채팅 컨트롤러 생성과 게임 채팅 상태 초기화**
 
-Add imports:
+다음 모듈을 가져옵니다.
 
 ```js
 import { layoutChatBubble, worldToScreen } from "./chat-bubble-layout.js";
@@ -1026,7 +1026,7 @@ import { ChatController } from "./chat-controller.js";
 import { latestBubblesByUid } from "./chat-state.js";
 ```
 
-In the constructor add:
+생성자에 다음 내용을 추가합니다.
 
 ```js
 this.chatInputActive = false;
@@ -1048,9 +1048,9 @@ this.chat = new ChatController({
 });
 ```
 
-- [ ] **Step 4: Connect chat callbacks to the existing Firebase network lifecycle**
+- [ ] **4단계: 기존 Firebase 네트워크 생명주기에 채팅 콜백 연결**
 
-Replace the positional `createNetworkAdapter` call in `enter()`:
+`enter()`의 위치 인자 방식 `createNetworkAdapter` 호출을 다음과 같이 교체합니다.
 
 ```js
 this.network = await createNetworkAdapter({
@@ -1063,9 +1063,9 @@ this.chat.setMode(this.network.chat.mode === "firebase" ? "online" : "offline",
   this.network.chat.mode === "firebase" ? "전체 채팅" : "채팅 오프라인");
 ```
 
-In `leave()` call `this.chat.reset()`, clear `chatMessages`, and set `chatInputActive = false` after the network adapter stops.
+`leave()`에서는 네트워크 어댑터가 정지한 뒤 `this.chat.reset()`을 호출하고, `chatMessages`를 비우며, `chatInputActive = false`로 설정합니다.
 
-- [ ] **Step 5: Add public focus methods and network send/receive coordination**
+- [ ] **5단계: 공개 포커스 메서드와 네트워크 송수신 연동 추가**
 
 ```js
 openChatInput() {
@@ -1094,9 +1094,9 @@ receiveChatMessages(messages) {
 }
 ```
 
-- [ ] **Step 6: Wire DOM elements and Enter/Escape priority in `main.js`**
+- [ ] **6단계: `main.js`에 DOM 요소와 Enter/Escape 우선순위 연결**
 
-Import `chatKeyAction`, add `chatPanel`, `chatMessages`, `chatForm`, `chatInput`, and `chatStatus` to `elements`, then replace the global Escape-only listener with:
+`chatKeyAction`을 가져오고 `elements`에 `chatPanel`, `chatMessages`, `chatForm`, `chatInput`, `chatStatus`를 추가한 다음, 전역 Escape 전용 이벤트 처리기를 다음 코드로 교체합니다.
 
 ```js
 addEventListener("keydown", event => {
@@ -1122,17 +1122,17 @@ addEventListener("keydown", event => {
 });
 ```
 
-The existing `exitButton`, `cancelExitButton`, `confirmExitButton`, and `pagehide` listeners remain byte-for-byte unchanged; only the global keyboard listener is replaced.
+기존 `exitButton`, `cancelExitButton`, `confirmExitButton`, `pagehide` 이벤트 처리기는 그대로 유지하고 전역 키보드 이벤트 처리기만 교체합니다.
 
-- [ ] **Step 7: Suppress movement and attacks while chat is active**
+- [ ] **7단계: 채팅 활성화 중 이동과 공격 입력 차단**
 
-Add `this.chatInputActive` to the `keydown` guard:
+`keydown` 입력 차단 조건에 `this.chatInputActive`를 추가합니다.
 
 ```js
 if (!this.running || !this.inputEnabled || this.chatInputActive || isTypingTarget(event.target)) return;
 ```
 
-Also change `updatePlayerMovement()` to require both flags:
+`updatePlayerMovement()`도 두 상태를 모두 확인하도록 변경합니다.
 
 ```js
 const movement = this.inputEnabled && !this.chatInputActive
@@ -1140,13 +1140,13 @@ const movement = this.inputEnabled && !this.chatInputActive
   : { x: 0, y: 0 };
 ```
 
-- [ ] **Step 8: Render speech bubbles in a separate overlay pass**
+- [ ] **8단계: 별도의 오버레이 단계에서 말풍선 렌더링**
 
-In `render()` give the local entity its authenticated UID, collect visible player entities, and draw bubbles after all characters/enemies:
+`render()`에서 로컬 캐릭터에 인증된 UID를 지정하고, 현재 보이는 플레이어 객체를 모은 뒤, 모든 캐릭터와 몬스터를 그린 다음 말풍선을 그립니다.
 
 ```js
 const playerEntities = [];
-// While drawing each visible player entity:
+// 화면에 보이는 각 플레이어 객체를 그리는 동안:
 playerEntities.push(entity);
 
 const bubbles = latestBubblesByUid(this.chatMessages, {
@@ -1159,9 +1159,9 @@ for (const entity of playerEntities) {
 }
 ```
 
-The local entity must use `uid: this.network?.uid || "local-player"`; remote entities already carry their UID.
+로컬 객체는 `uid: this.network?.uid || "local-player"`를 사용해야 하며, 원격 객체에는 이미 각 UID가 들어 있습니다.
 
-Add this Canvas renderer near `drawPixelCharacter()`:
+다음 Canvas 렌더러를 `drawPixelCharacter()` 가까이에 추가합니다.
 
 ```js
 function drawChatBubble(ctx, player, message, cameraX, cameraY, viewportWidth, viewportHeight) {
@@ -1211,9 +1211,9 @@ function drawChatBubble(ctx, player, message, cameraX, cameraY, viewportWidth, v
 }
 ```
 
-- [ ] **Step 9: Extend browser smoke coverage for offline safety and Escape priority**
+- [ ] **9단계: 오프라인 안전성과 Escape 우선순위 브라우저 스모크 검사 확장**
 
-Retain this exact deterministic route before navigation, then add assertions after entering:
+페이지 이동 전에 다음과 같은 결정적 네트워크 차단 경로를 그대로 유지하고, 입장 후 검증을 추가합니다.
 
 ```js
 await page.route("https://www.gstatic.com/**", route => route.abort());
@@ -1225,7 +1225,7 @@ assert.equal(await page.locator("#chatInput").isDisabled(), true);
 assert.match(await page.locator("#chatStatus").textContent(), /오프라인/);
 ```
 
-Before the final exit-button flow, verify an offline `Enter` does not trap focus or break `Escape`:
+마지막 나가기 버튼 흐름을 검사하기 전에 오프라인 상태의 `Enter`가 포커스를 가두거나 `Escape` 동작을 깨뜨리지 않는지 확인합니다.
 
 ```js
 await page.keyboard.press("Enter");
@@ -1235,15 +1235,15 @@ assert.equal(await page.locator("#exitOverlay").isVisible(), true);
 await page.locator("#cancelExitButton").click();
 ```
 
-The Unicode wrapping, corners, tail reversal, and virtual zoom are already covered by pure layout tests; the browser smoke test confirms the production DOM, offline mode, and exit flow without requiring live Firebase credentials.
+유니코드 줄바꿈, 네 모서리, 말꼬리 반전, 가상 줌은 순수 배치 테스트에서 이미 검증합니다. 브라우저 스모크 테스트는 실제 Firebase 자격 증명 없이 운영 DOM, 오프라인 상태, 나가기 흐름을 확인합니다.
 
-- [ ] **Step 10: Run full unit and browser smoke verification**
+- [ ] **10단계: 전체 단위 테스트와 브라우저 스모크 검증 실행**
 
-Run: `node --test tests/*.test.mjs`
+실행: `node --test tests/*.test.mjs`
 
-Expected: all tests pass.
+예상 결과: 모든 테스트가 통과합니다.
 
-Start a local static server in the repository, then run:
+저장소에서 로컬 정적 서버를 시작한 뒤 다음 명령을 실행합니다.
 
 ```powershell
 $env:PIXEL_WORLD_URL='http://127.0.0.1:4173'
@@ -1251,9 +1251,9 @@ $env:PLAYWRIGHT_BROWSER_PATH='C:\Program Files (x86)\Google\Chrome\Application\c
 node tests/browser-smoke.cjs
 ```
 
-Expected: exit 0, no page errors, offline chat is disabled, and `Escape` still opens/cancels the exit dialog.
+예상 결과: 종료 코드 0, 페이지 오류 없음, 오프라인 채팅 비활성화, `Escape`로 나가기 확인창 열기와 취소가 정상 동작합니다.
 
-- [ ] **Step 11: Commit game and speech-bubble integration**
+- [ ] **11단계: 게임과 말풍선 통합 작업 커밋**
 
 ```powershell
 git add -- src/game.js src/main.js tests/browser-smoke.cjs tests/static-chat-integration.test.mjs
@@ -1262,19 +1262,19 @@ git commit -m "플레이어 채팅 말풍선 통합"
 
 ---
 
-### Task 6: Documentation, Firebase Deployment Notes, and Mandatory Secret Audit
+### 작업 6: 문서, Firebase 배포 안내, 필수 비밀정보 감사
 
-**Files:**
-- Modify: `README.md`
-- Modify: `FIREBASE_SETUP.md`
+**파일:**
+- 수정: `README.md`
+- 수정: `FIREBASE_SETUP.md`
 
-**Interfaces:**
-- Documents the runtime path `rooms/public/chat/{uid}/{messageId}` and the owner-only rule model
-- Produces the final security report required by the user; it does not store any credential value
+**인터페이스:**
+- 런타임 경로 `rooms/public/chat/{uid}/{messageId}`와 작성자 전용 규칙 모델 문서화
+- 사용자가 요청한 최종 보안 보고서 제공. 자격 증명 값은 어떤 것도 저장하지 않음
 
-- [ ] **Step 1: Document chat controls, retention, and Firebase rule deployment**
+- [ ] **1단계: 채팅 조작, 보존 범위, Firebase 규칙 배포 방법 문서화**
 
-Add these facts to README/Firebase setup prose:
+README와 Firebase 설정 안내에 다음 내용을 추가합니다.
 
 ```markdown
 ## 전체 월드 채팅
@@ -1289,40 +1289,40 @@ Add these facts to README/Firebase setup prose:
 `database.rules.json`을 배포하지 않으면 채팅 쓰기가 거부됩니다.
 ```
 
-- [ ] **Step 2: Run fresh complete verification**
+- [ ] **2단계: 전체 검증을 처음부터 다시 실행**
 
-Run: `node --test tests/*.test.mjs`
+실행: `node --test tests/*.test.mjs`
 
-Expected: every unit/static test passes with 0 failures.
+예상 결과: 모든 단위·정적 테스트가 실패 0건으로 통과합니다.
 
-Run: `Get-Content -Raw database.rules.json | ConvertFrom-Json | Out-Null`
+실행: `Get-Content -Raw database.rules.json | ConvertFrom-Json | Out-Null`
 
-Expected: exit 0.
+예상 결과: 종료 코드 0입니다.
 
-Run the browser smoke procedure from Task 5 again.
+작업 5의 브라우저 스모크 절차를 다시 실행합니다.
 
-Expected: exit 0 and no page errors.
+예상 결과: 종료 코드 0이며 페이지 오류가 없습니다.
 
-If the user separately authorizes deployment of the updated rules and client, open two private browser sessions with different nicknames and verify this exact matrix; otherwise report every row as `배포 승인 전 확인 필요`:
+사용자가 변경된 규칙과 클라이언트 배포를 별도로 승인하면 서로 다른 닉네임으로 비공개 브라우저 세션 두 개를 열어 다음 항목을 정확히 검증합니다. 승인하지 않았다면 모든 항목을 `배포 승인 전 확인 필요`로 보고합니다.
 
 ```text
-Session A village -> Session B forest: both messages appear in the global panel
-Different regions: neither character bubble renders on the other region
-Both sessions village: each newest message renders above the matching character for 4 seconds
-Session B exits: all Session B messages disappear after its chat UID subtree is removed
-Session A remains: movement, Ctrl/Q attacks, portals, and exit continue working
+세션 A 마을 -> 세션 B 숲: 두 메시지가 모두 전체 채팅 패널에 표시됨
+서로 다른 지역: 상대 지역의 캐릭터 말풍선은 표시되지 않음
+두 세션 모두 마을: 각 최신 메시지가 해당 캐릭터 위에 4초간 표시됨
+세션 B 퇴장: 채팅 UID 하위 트리 삭제 후 세션 B의 모든 메시지가 사라짐
+세션 A 유지: 이동, Ctrl/Q 공격, 포탈, 나가기 기능이 계속 동작함
 ```
 
-- [ ] **Step 3: Run a tracked-file secret scan without printing matched values**
+- [ ] **3단계: 일치한 값을 출력하지 않는 추적 파일 비밀정보 검사 실행**
 
 ```powershell
 $patterns = @(
-  @{ Name='Google API key'; Regex='AIza[0-9A-Za-z_-]{35}' },
-  @{ Name='Private key block'; Regex='-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----' },
-  @{ Name='Service account private_key'; Regex='"private_key"\s*:' },
-  @{ Name='GitHub token'; Regex='gh[pousr]_[0-9A-Za-z]{20,}' },
-  @{ Name='AWS access key'; Regex='AKIA[0-9A-Z]{16}' },
-  @{ Name='OpenAI-style key'; Regex='sk-[0-9A-Za-z_-]{20,}' }
+  @{ Name='Google API 키'; Regex='AIza[0-9A-Za-z_-]{35}' },
+  @{ Name='개인 키 블록'; Regex='-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----' },
+  @{ Name='서비스 계정 private_key'; Regex='"private_key"\s*:' },
+  @{ Name='GitHub 토큰'; Regex='gh[pousr]_[0-9A-Za-z]{20,}' },
+  @{ Name='AWS 액세스 키'; Regex='AKIA[0-9A-Z]{16}' },
+  @{ Name='OpenAI 형식 키'; Regex='sk-[0-9A-Za-z_-]{20,}' }
 )
 $findings = @()
 foreach ($file in (git ls-files)) {
@@ -1340,9 +1340,9 @@ foreach ($file in (git ls-files)) {
 $findings | Sort-Object Type,File,Line | Format-Table -AutoSize
 ```
 
-Expected: only the known Firebase Web API identifier may appear in `src/firebase-config.js`. Any private key, service-account `private_key`, GitHub token, AWS key, or OpenAI-style key blocks completion and requires revocation/rotation before publishing.
+예상 결과: 알려진 Firebase 웹 API 식별자만 `src/firebase-config.js`에 나타날 수 있습니다. 개인 키, 서비스 계정 `private_key`, GitHub 토큰, AWS 키, OpenAI 형식 키가 발견되면 작업 완료를 중단하고 게시 전에 해당 키를 폐기·교체해야 합니다.
 
-Then scan commit diffs for a high-risk key that was added and removed before the final tree:
+다음으로 최종 파일 상태에서는 삭제되었지만 이전 커밋에서 추가되었던 고위험 키가 있는지 커밋 변경 내역을 검사합니다.
 
 ```powershell
 $historyPatterns = @(
@@ -1362,11 +1362,11 @@ foreach ($pattern in $historyPatterns) {
 $historyHits | Sort-Object -Unique
 ```
 
-Expected: no output. Any file output requires inspection without printing the matched credential, followed by revocation/rotation if it was a real admin credential.
+예상 결과: 출력이 없어야 합니다. 파일이 출력되면 일치한 자격 증명 값을 표시하지 않고 조사하며, 실제 관리자 자격 증명이었다면 폐기·교체합니다.
 
-- [ ] **Step 4: Inspect the actual diff and workflow secret references**
+- [ ] **4단계: 실제 변경 내역과 워크플로 비밀정보 참조 검사**
 
-Run:
+실행:
 
 ```powershell
 git diff --check
@@ -1375,34 +1375,34 @@ git diff --stat 5427a9d...HEAD
 rg -n "firebaseServiceAccount|FIREBASE_SERVICE_ACCOUNT" .github/workflows
 ```
 
-Expected:
+예상 결과:
 
-- No whitespace errors.
-- Only intended chat/spec/docs files changed.
-- The Firebase deployment workflow contains only `${{ secrets.FIREBASE_SERVICE_ACCOUNT_PIXEL_WORLD_8CB9B }}` and never a JSON value or private key.
+- 공백 오류가 없습니다.
+- 의도한 채팅·설계·문서 파일만 변경되었습니다.
+- Firebase 배포 워크플로에는 `${{ secrets.FIREBASE_SERVICE_ACCOUNT_PIXEL_WORLD_8CB9B }}` 참조만 있고 JSON 값이나 개인 키는 없습니다.
 
-- [ ] **Step 5: Record console-only checks honestly in the handoff**
+- [ ] **5단계: 콘솔에서만 확인 가능한 항목을 인수인계에 정확히 기록**
 
-The completion report must include this exact status model:
+완료 보고서에는 다음 상태 형식을 정확히 포함합니다.
 
 ```text
-Firebase Web API key: expected public client identifier; tracked location reported
-Firebase Admin/service-account key in code/history: not detected, or BLOCKED with exact file only
-Other high-risk key patterns: not detected, or BLOCKED with exact file only
-Realtime Database rules file: JSON valid; authenticated read and owner-only player/chat writes verified
-Google Cloud HTTP referrer/API restrictions: verified only if the console was actually inspected; otherwise 확인 필요
-Firebase App Check enforcement: verified only if the console was actually inspected; otherwise 확인 필요
-GitHub Secret scanning open alerts: verified only if the Security page/API was actually inspected; otherwise 확인 필요
-Firebase deployment workflow secret: reference-only in Git; Actions secret value/existence 확인 필요 unless console inspected
+Firebase 웹 API 키: 공개용 클라이언트 식별자로 예상됨, 추적 파일 위치 보고
+코드/이력의 Firebase Admin·서비스 계정 키: 감지되지 않음, 또는 정확한 파일명만 포함해 차단 보고
+기타 고위험 키 형식: 감지되지 않음, 또는 정확한 파일명만 포함해 차단 보고
+Realtime Database 규칙 파일: JSON 유효, 인증된 읽기와 작성자 전용 플레이어·채팅 쓰기 확인
+Google Cloud HTTP 리퍼러/API 제한: 실제 콘솔을 확인한 경우에만 확인 완료, 그 외에는 확인 필요
+Firebase App Check 적용: 실제 콘솔을 확인한 경우에만 확인 완료, 그 외에는 확인 필요
+GitHub Secret scanning 미해결 알림: Security 페이지/API를 실제로 확인한 경우에만 확인 완료, 그 외에는 확인 필요
+Firebase 배포 워크플로 비밀정보: Git에는 참조만 존재, 콘솔을 확인하지 않았다면 Actions 비밀정보 값·존재 여부는 확인 필요
 ```
 
-- [ ] **Step 6: Commit documentation**
+- [ ] **6단계: 문서 작업 커밋**
 
 ```powershell
 git add -- README.md FIREBASE_SETUP.md
 git commit -m "전체 채팅과 Firebase 보안 안내 추가"
 ```
 
-- [ ] **Step 7: Stop before publishing and present integration choices**
+- [ ] **7단계: 게시 전 중지하고 통합 방식 선택지 제시**
 
-Do not push, deploy Firebase rules/Hosting, close Secret scanning alerts, change repository visibility, or enable App Check without the user's explicit approval. Report the branch name, commits, test counts, browser smoke result, and the full security status from Step 5.
+사용자의 명시적 승인 없이 푸시, Firebase 규칙·Hosting 배포, Secret scanning 알림 닫기, 저장소 공개 범위 변경, App Check 활성화를 진행하지 않습니다. 브랜치 이름, 커밋, 테스트 개수, 브라우저 스모크 결과, 5단계의 전체 보안 상태를 보고합니다.
