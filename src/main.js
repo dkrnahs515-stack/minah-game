@@ -17,6 +17,8 @@ const elements = {
   respawnOverlay: document.querySelector("#respawnOverlay"),
   strongSlot: document.querySelector("#strongSlot"),
   strongCooldown: document.querySelector("#strongCooldown"),
+  portalTransitionOverlay: document.querySelector("#portalTransitionOverlay"),
+  portalDestination: document.querySelector("#portalDestination"),
 };
 
 const game = new PixelRPG(elements);

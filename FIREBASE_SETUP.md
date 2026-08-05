@@ -79,8 +79,11 @@ firebase deploy --only hosting,database
 ## 온라인 구조
 
 - 익명 인증으로 플레이어별 UID 발급
-- `rooms/public/players/{uid}`에 위치와 방향 저장
+- `rooms/public/players/{uid}`에 위치, 방향과 현재 `mapId` 저장
 - 위치는 초당 최대 20회 전송
-- 원격 캐릭터는 보간하여 부드럽게 표시
+- 같은 `mapId`에 있는 원격 캐릭터만 보간하여 부드럽게 표시
+- 이전 데이터에 `mapId`가 없으면 중앙 마을(`village`)로 처리
 - 접속 종료 시 `onDisconnect().remove()`로 플레이어 데이터 삭제
 - `database.rules.json`에서 본인 데이터만 수정 가능
+
+지역 ID는 `village`, `volcano`, `forest`, `coast`만 허용됩니다. 보안 규칙은 중앙 마을 좌표를 `2,880 × 1,800`, 외부 지역 좌표를 `4,320 × 3,600` 안으로 제한합니다. 월드 확장 코드를 배포할 때 갱신된 `database.rules.json`도 함께 게시해야 온라인 이동이 거부되지 않습니다.

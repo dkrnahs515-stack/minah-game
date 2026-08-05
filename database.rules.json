@@ -6,7 +6,7 @@
           ".read": "auth != null",
           "$uid": {
             ".write": "auth != null && auth.uid === $uid",
-            ".validate": "newData.hasChildren(['x','y','dir','moving','name','color']) && newData.child('x').isNumber() && newData.child('x').val() >= 0 && newData.child('x').val() <= 2880 && newData.child('y').isNumber() && newData.child('y').val() >= 0 && newData.child('y').val() <= 1800 && newData.child('dir').isString() && newData.child('name').isString() && newData.child('name').val().length <= 16 && newData.child('color').isString()"
+            ".validate": "newData.hasChildren(['x','y','dir','moving','name','color','mapId']) && newData.child('x').isNumber() && newData.child('x').val() >= 0 && newData.child('y').isNumber() && newData.child('y').val() >= 0 && newData.child('mapId').isString() && (newData.child('mapId').val() === 'village' || newData.child('mapId').val() === 'volcano' || newData.child('mapId').val() === 'forest' || newData.child('mapId').val() === 'coast') && ((newData.child('mapId').val() === 'village' && newData.child('x').val() <= 2880 && newData.child('y').val() <= 1800) || (newData.child('mapId').val() !== 'village' && newData.child('x').val() <= 4320 && newData.child('y').val() <= 3600)) && newData.child('dir').isString() && newData.child('name').isString() && newData.child('name').val().length <= 16 && newData.child('color').isString()"
           }
         }
       }

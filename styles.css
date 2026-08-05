@@ -63,6 +63,12 @@ kbd { min-width: 23px; padding: 2px 5px; border: 1px solid rgba(255,255,255,.35)
 .slot.flash { animation: slotFlash .24s ease; }
 @keyframes slotFlash { 45% { transform: scale(.91); box-shadow: 0 0 22px rgba(255,255,255,.7); filter: brightness(1.45); } }
 
+.portal-transition-overlay { position: absolute; inset: 0; z-index: 24; display: grid; place-items: center; pointer-events: none; background: radial-gradient(circle at center,rgba(88,65,140,.45),rgba(3,7,18,.94)); opacity: 0; transition: opacity .15s ease; }
+.portal-transition-overlay.active { opacity: 1; }
+.portal-transition-overlay div { min-width: 260px; padding: 22px 30px; border: 1px solid rgba(196,181,253,.55); border-radius: 18px; background: rgba(15,23,42,.78); text-align: center; box-shadow: 0 0 45px rgba(139,92,246,.28); }
+.portal-transition-overlay strong { display: block; margin-top: 6px; color: #f5f3ff; font-size: 28px; }
+.portal-transition-overlay small { color: #c4b5fd; font-size: 10px; font-weight: 900; letter-spacing: .18em; }
+
 .respawn-overlay { position: absolute; inset: 0; z-index: 25; display: grid; place-items: center; background: radial-gradient(circle,rgba(76,5,25,.2),rgba(2,6,15,.78)); }
 .respawn-overlay div { padding: 22px 30px; border: 1px solid rgba(248,113,113,.42); border-radius: 16px; background: rgba(15,23,42,.88); text-align: center; }
 .respawn-overlay strong { display: block; color: #fecaca; font-size: 27px; }

@@ -1,180 +1,242 @@
-const SPAWNS = Object.freeze([
-  { x: 1260, y: 1040 },
-  { x: 1590, y: 1060 },
-  { x: 1450, y: 1330 },
-]);
+import { getWorldDefinition } from "./world-data.js";
 
-const SLIME_SPEED = 85;
+const ENEMY_TYPES = Object.freeze({
+  "fire-slime": Object.freeze({
+    name: "화염 슬라임", hp: 4, speed: 92, damage: 12, radius: 18,
+    color: "#ef5a32", accent: "#ffb23f",
+  }),
+  "forest-slime": Object.freeze({
+    name: "숲 슬라임", hp: 4, speed: 88, damage: 10, radius: 18,
+    color: "#4fb867", accent: "#91d66f",
+  }),
+  boar: Object.freeze({
+    name: "멧돼지", hp: 6, speed: 112, damage: 15, radius: 20,
+    color: "#8b5a3c", accent: "#d2a36f",
+  }),
+  crab: Object.freeze({
+    name: "해안 게", hp: 5, speed: 76, damage: 12, radius: 20,
+    color: "#ef6b57", accent: "#ffc3a7",
+  }),
+  "water-slime": Object.freeze({
+    name: "물방울 슬라임", hp: 4, speed: 84, damage: 10, radius: 18,
+    color: "#48a9d8", accent: "#9be5f2",
+  }),
+});
+
 const AGGRO_DISTANCE = 360;
 const RETURN_DISTANCE = 520;
 const DEATH_DURATION = 0.65;
 
-export function createSlimes() {
-  return SPAWNS.map((spawn, index) => ({
-    id: `slime-${index + 1}`,
-    x: spawn.x,
-    y: spawn.y,
-    prevX: spawn.x,
-    prevY: spawn.y,
-    homeX: spawn.x,
-    homeY: spawn.y,
-    hp: 3,
-    maxHp: 3,
-    radius: 18,
-    state: "idle",
-    moving: false,
-    step: index * 1.7,
-    hitFlash: 0,
-    shake: 0,
-    deathTime: 0,
-    opacity: 1,
-    scale: 1,
-    knockbackX: 0,
-    knockbackY: 0,
-    contactCooldown: 0,
-  }));
+export function createEnemies(mapId) {
+  return getWorldDefinition(mapId).enemySpawns.map((spawn, index) => {
+    const type = ENEMY_TYPES[spawn.kind];
+    return {
+      id: `${mapId}-enemy-${index + 1}`,
+      kind: spawn.kind,
+      name: type.name,
+      x: spawn.x,
+      y: spawn.y,
+      prevX: spawn.x,
+      prevY: spawn.y,
+      homeX: spawn.x,
+      homeY: spawn.y,
+      hp: type.hp,
+      maxHp: type.hp,
+      speed: type.speed,
+      contactDamage: type.damage,
+      radius: type.radius,
+      color: type.color,
+      accent: type.accent,
+      state: "idle",
+      moving: false,
+      step: index * 1.7,
+      hitFlash: 0,
+      shake: 0,
+      deathTime: 0,
+      opacity: 1,
+      scale: 1,
+      knockbackX: 0,
+      knockbackY: 0,
+      contactCooldown: 0,
+    };
+  });
 }
 
-export function damageSlime(slime, damage, direction, knockbackSpeed) {
-  if (slime.state === "dying") return { killed: false, damageNumber: null };
+export function damageEnemy(enemy, damage, direction, knockbackSpeed) {
+  if (enemy.state === "dying") return { killed: false, damageNumber: null };
 
-  slime.hp = Math.max(0, slime.hp - damage);
-  slime.hitFlash = 0.16;
-  slime.shake = 0.2;
-  slime.knockbackX = direction.x * knockbackSpeed;
-  slime.knockbackY = direction.y * knockbackSpeed;
-  if (slime.hp === 0) {
-    slime.state = "dying";
-    slime.deathTime = 0;
-    slime.moving = false;
+  enemy.hp = Math.max(0, enemy.hp - damage);
+  enemy.hitFlash = 0.16;
+  enemy.shake = 0.2;
+  enemy.knockbackX = direction.x * knockbackSpeed;
+  enemy.knockbackY = direction.y * knockbackSpeed;
+  if (enemy.hp === 0) {
+    enemy.state = "dying";
+    enemy.deathTime = 0;
+    enemy.moving = false;
   }
 
   return {
-    killed: slime.hp === 0,
-    damageNumber: { x: slime.x, y: slime.y - 26, value: damage },
+    killed: enemy.hp === 0,
+    damageNumber: { x: enemy.x, y: enemy.y - 26, value: damage },
   };
 }
 
-export function updateSlimes(slimes, player, dt, isBlocked) {
-  for (const slime of slimes) {
-    slime.prevX = slime.x;
-    slime.prevY = slime.y;
-    slime.hitFlash = Math.max(0, slime.hitFlash - dt);
-    slime.shake = Math.max(0, slime.shake - dt);
-    slime.contactCooldown = Math.max(0, slime.contactCooldown - dt);
+export function updateEnemies(enemies, player, dt, isBlocked) {
+  for (const enemy of enemies) {
+    enemy.prevX = enemy.x;
+    enemy.prevY = enemy.y;
+    enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
+    enemy.shake = Math.max(0, enemy.shake - dt);
+    enemy.contactCooldown = Math.max(0, enemy.contactCooldown - dt);
 
-    const hasKnockback = Math.hypot(slime.knockbackX, slime.knockbackY) > 1;
+    const hasKnockback = Math.hypot(enemy.knockbackX, enemy.knockbackY) > 1;
     if (hasKnockback) {
       moveWithCollision(
-        slime,
-        slime.knockbackX * dt,
-        slime.knockbackY * dt,
+        enemy,
+        enemy.knockbackX * dt,
+        enemy.knockbackY * dt,
         isBlocked,
       );
       const decay = Math.exp(-8 * dt);
-      slime.knockbackX *= decay;
-      slime.knockbackY *= decay;
+      enemy.knockbackX *= decay;
+      enemy.knockbackY *= decay;
     } else {
-      slime.knockbackX = 0;
-      slime.knockbackY = 0;
+      enemy.knockbackX = 0;
+      enemy.knockbackY = 0;
     }
 
-    if (slime.state === "dying") {
-      slime.deathTime += dt;
-      const progress = Math.min(1, slime.deathTime / DEATH_DURATION);
-      slime.opacity = 1 - progress;
-      slime.scale = 1 - 0.85 * progress;
+    if (enemy.state === "dying") {
+      enemy.deathTime += dt;
+      const progress = Math.min(1, enemy.deathTime / DEATH_DURATION);
+      enemy.opacity = 1 - progress;
+      enemy.scale = 1 - 0.85 * progress;
       continue;
     }
 
-    if (!hasKnockback) updateSlimeMovement(slime, player, dt, isBlocked);
-    if (slime.moving) slime.step += dt * 8;
+    if (!hasKnockback) updateEnemyMovement(enemy, player, dt, isBlocked);
+    if (enemy.moving) enemy.step += dt * 8;
   }
 
-  return slimes.filter(slime => slime.state !== "dying" || slime.deathTime < DEATH_DURATION);
+  return enemies.filter(enemy => enemy.state !== "dying" || enemy.deathTime < DEATH_DURATION);
 }
 
-export function drawSlime(ctx, slime, cameraX, cameraY, alpha = 1) {
-  const x = Math.round(lerp(slime.prevX, slime.x, alpha) - cameraX);
-  const y = Math.round(lerp(slime.prevY, slime.y, alpha) - cameraY);
-  const bob = slime.state === "dying"
-    ? -Math.sin(Math.min(1, slime.deathTime / DEATH_DURATION) * Math.PI) * 16
-    : Math.sin(slime.step) * 2;
-  const shake = slime.shake > 0 ? Math.sin(slime.shake * 95) * 4 : 0;
+export function drawEnemy(ctx, enemy, cameraX, cameraY, alpha = 1) {
+  const x = Math.round(lerp(enemy.prevX, enemy.x, alpha) - cameraX);
+  const y = Math.round(lerp(enemy.prevY, enemy.y, alpha) - cameraY);
+  const bob = enemy.state === "dying"
+    ? -Math.sin(Math.min(1, enemy.deathTime / DEATH_DURATION) * Math.PI) * 16
+    : Math.sin(enemy.step) * 2;
+  const shake = enemy.shake > 0 ? Math.sin(enemy.shake * 95) * 4 : 0;
 
   ctx.save();
-  ctx.globalAlpha = slime.opacity;
+  ctx.globalAlpha = enemy.opacity;
   ctx.translate(x + shake, y + bob);
-  ctx.scale(slime.scale, slime.scale);
-
+  ctx.scale(enemy.scale, enemy.scale);
   ctx.fillStyle = "rgba(0,0,0,.28)";
-  ctx.fillRect(-18, 12, 36, 8);
-  ctx.fillStyle = slime.hitFlash > 0 ? "#ffffff" : "#50c96b";
-  ctx.fillRect(-18, -10, 36, 22);
-  ctx.fillRect(-13, -16, 26, 8);
-  ctx.fillStyle = slime.hitFlash > 0 ? "#dcfce7" : "#2f9349";
-  ctx.fillRect(-15, 7, 30, 7);
-  ctx.fillStyle = "#14311d";
-  ctx.fillRect(-9, -6, 4, 5);
-  ctx.fillRect(5, -6, 4, 5);
-  ctx.fillRect(-4, 3, 8, 3);
+  ctx.fillRect(-20, 12, 40, 8);
 
-  if (slime.state !== "dying" && slime.hp < slime.maxHp) {
+  if (enemy.kind === "boar") drawBoar(ctx, enemy);
+  else if (enemy.kind === "crab") drawCrab(ctx, enemy);
+  else drawSlimeBody(ctx, enemy);
+
+  if (enemy.state !== "dying" && enemy.hp < enemy.maxHp) {
     ctx.fillStyle = "rgba(4,10,7,.8)";
-    ctx.fillRect(-19, -27, 38, 5);
+    ctx.fillRect(-21, -31, 42, 5);
     ctx.fillStyle = "#ef4444";
-    ctx.fillRect(-18, -26, 36 * (slime.hp / slime.maxHp), 3);
+    ctx.fillRect(-20, -30, 40 * (enemy.hp / enemy.maxHp), 3);
   }
   ctx.restore();
 }
 
-function updateSlimeMovement(slime, player, dt, isBlocked) {
-  const distanceToPlayer = Math.hypot(player.x - slime.x, player.y - slime.y);
-  const distanceFromHome = Math.hypot(slime.homeX - slime.x, slime.homeY - slime.y);
+function drawSlimeBody(ctx, enemy) {
+  ctx.fillStyle = enemy.hitFlash > 0 ? "#ffffff" : enemy.color;
+  ctx.fillRect(-18, -10, 36, 22);
+  ctx.fillRect(-13, -16, 26, 8);
+  ctx.fillStyle = enemy.hitFlash > 0 ? "#ffffff" : enemy.accent;
+  ctx.fillRect(-15, 7, 30, 7);
+  ctx.fillRect(-9, -11, 7, 5);
+  ctx.fillStyle = "#17311e";
+  ctx.fillRect(-9, -6, 4, 5);
+  ctx.fillRect(5, -6, 4, 5);
+  ctx.fillRect(-4, 3, 8, 3);
+}
+
+function drawBoar(ctx, enemy) {
+  ctx.fillStyle = enemy.hitFlash > 0 ? "#ffffff" : enemy.color;
+  ctx.fillRect(-22, -13, 38, 27);
+  ctx.fillRect(10, -9, 17, 19);
+  ctx.fillRect(-17, 11, 7, 9);
+  ctx.fillRect(7, 11, 7, 9);
+  ctx.fillStyle = enemy.hitFlash > 0 ? "#ffffff" : enemy.accent;
+  ctx.fillRect(17, 7, 14, 4);
+  ctx.fillRect(16, -14, 5, 8);
+  ctx.fillStyle = "#241711";
+  ctx.fillRect(18, -4, 4, 4);
+}
+
+function drawCrab(ctx, enemy) {
+  ctx.fillStyle = enemy.hitFlash > 0 ? "#ffffff" : enemy.color;
+  ctx.fillRect(-18, -10, 36, 23);
+  ctx.fillRect(-30, -13, 12, 10);
+  ctx.fillRect(18, -13, 12, 10);
+  ctx.fillRect(-27, 9, 12, 5);
+  ctx.fillRect(15, 9, 12, 5);
+  ctx.fillStyle = enemy.hitFlash > 0 ? "#ffffff" : enemy.accent;
+  ctx.fillRect(-13, -15, 8, 8);
+  ctx.fillRect(5, -15, 8, 8);
+  ctx.fillStyle = "#2d1714";
+  ctx.fillRect(-10, -13, 3, 3);
+  ctx.fillRect(7, -13, 3, 3);
+}
+
+function updateEnemyMovement(enemy, player, dt, isBlocked) {
+  const distanceToPlayer = Math.hypot(player.x - enemy.x, player.y - enemy.y);
+  const distanceFromHome = Math.hypot(enemy.homeX - enemy.x, enemy.homeY - enemy.y);
   let target = null;
 
   if (distanceFromHome > RETURN_DISTANCE) {
-    slime.state = "returning";
-    target = { x: slime.homeX, y: slime.homeY };
+    enemy.state = "returning";
+    target = { x: enemy.homeX, y: enemy.homeY };
   } else if (distanceToPlayer <= AGGRO_DISTANCE) {
-    slime.state = "chasing";
+    enemy.state = "chasing";
     target = player;
   } else if (distanceFromHome > 2) {
-    slime.state = "returning";
-    target = { x: slime.homeX, y: slime.homeY };
+    enemy.state = "returning";
+    target = { x: enemy.homeX, y: enemy.homeY };
   } else {
-    slime.state = "idle";
-    slime.moving = false;
+    enemy.state = "idle";
+    enemy.moving = false;
     return;
   }
 
-  const dx = target.x - slime.x;
-  const dy = target.y - slime.y;
+  const dx = target.x - enemy.x;
+  const dy = target.y - enemy.y;
   const distance = Math.hypot(dx, dy);
   if (distance <= 0.001) {
-    slime.moving = false;
+    enemy.moving = false;
     return;
   }
 
-  const step = Math.min(SLIME_SPEED * dt, distance);
-  slime.moving = moveWithCollision(
-    slime,
+  const step = Math.min(enemy.speed * dt, distance);
+  enemy.moving = moveWithCollision(
+    enemy,
     dx / distance * step,
     dy / distance * step,
     isBlocked,
   );
 }
 
-function moveWithCollision(slime, dx, dy, isBlocked) {
+function moveWithCollision(enemy, dx, dy, isBlocked) {
   let moved = false;
-  const nextX = slime.x + dx;
-  if (!isBlocked(nextX, slime.y, slime.radius)) {
-    slime.x = nextX;
+  const nextX = enemy.x + dx;
+  if (!isBlocked(nextX, enemy.y, enemy.radius)) {
+    enemy.x = nextX;
     moved = true;
   }
-  const nextY = slime.y + dy;
-  if (!isBlocked(slime.x, nextY, slime.radius)) {
-    slime.y = nextY;
+  const nextY = enemy.y + dy;
+  if (!isBlocked(enemy.x, nextY, enemy.radius)) {
+    enemy.y = nextY;
     moved = true;
   }
   return moved;
@@ -183,3 +245,10 @@ function moveWithCollision(slime, dx, dy, isBlocked) {
 function lerp(a, b, t) {
   return a + (b - a) * t;
 }
+
+// Temporary compatibility exports keep the game runnable until its orchestration is
+// switched to region-aware names in the portal integration task.
+export const createSlimes = () => createEnemies("village");
+export const damageSlime = damageEnemy;
+export const updateSlimes = updateEnemies;
+export const drawSlime = drawEnemy;

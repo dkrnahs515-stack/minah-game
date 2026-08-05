@@ -1,12 +1,18 @@
 import { GAME_CONFIG as C } from "./config.js";
 import { attackDefinition, directionVector, isTargetInAttackArc } from "./combat.js";
-import { createSlimes, damageSlime, drawSlime, updateSlimes } from "./enemies.js";
+import { createEnemies, damageEnemy, drawEnemy, updateEnemies } from "./enemies.js";
 import { movementVector } from "./input.js";
 import { createNetworkAdapter } from "./network.js";
 import { applyPlayerDamage, respawnPlayer, tickPlayerStatus } from "./player-combat.js";
-import { createWorldLayer, getBiome, isWorldPositionBlocked } from "./world.js";
+import { advancePortalTransition, createPortalTransition } from "./portal-transition.js";
+import { getWorldDefinition, normalizeWorldId } from "./world-data.js";
+import {
+  createWorldLayer,
+  findActivePortal,
+  getBiome,
+  isWorldPositionBlocked,
+} from "./world.js";
 
-const SPAWN = Object.freeze({ x: 1440, y: 1110 });
 const PLAYER_RADIUS = 14;
 const MAX_MEASURED_FPS = 240;
 
@@ -24,9 +30,11 @@ export class PixelRPG {
     this.minimapCtx = this.minimap.getContext("2d");
     this.ui = elements;
     this.keys = new Set();
-    this.worldLayer = createWorldLayer();
+    this.mapId = "village";
+    this.worldLayer = createWorldLayer(this.mapId);
+    const spawn = getWorldDefinition(this.mapId).spawn;
     this.player = {
-      x: SPAWN.x, y: SPAWN.y, prevX: SPAWN.x, prevY: SPAWN.y,
+      x: spawn.x, y: spawn.y, prevX: spawn.x, prevY: spawn.y,
       w: 24, h: 31, dir: "down", moving: false, step: 0,
       hp: 100, maxHp: 100, mp: 100, maxMp: 100,
       invulnerable: 0, hitFlash: 0, respawnTimer: 0,
@@ -34,7 +42,9 @@ export class PixelRPG {
     };
     this.camera = { x: 0, y: 0, prevX: 0, prevY: 0 };
     this.remotePlayers = new Map();
-    this.slimes = [];
+    this.enemies = [];
+    this.portalTransition = null;
+    this.portalCooldown = 0;
     this.attackState = null;
     this.basicCooldown = 0;
     this.strongCooldown = 0;
@@ -65,6 +75,7 @@ export class PixelRPG {
     this.ui.playerName.textContent = this.player.name;
     this.ui.playerCount.textContent = "1";
     this.remotePlayers.clear();
+    this.switchWorld("village", getWorldDefinition("village").spawn.x, getWorldDefinition("village").spawn.y, false);
     this.resetCombatState();
     this.inputEnabled = true;
     this.resize();
@@ -97,6 +108,9 @@ export class PixelRPG {
     if (network) await network.stop();
 
     this.remotePlayers.clear();
+    this.portalTransition = null;
+    this.portalCooldown = 0;
+    this.switchWorld("village", getWorldDefinition("village").spawn.x, getWorldDefinition("village").spawn.y, false);
     this.resetCombatState();
     this.ui.playerCount.textContent = "0";
     this.updateNetworkStatus("offline", "나감");
@@ -195,21 +209,28 @@ export class PixelRPG {
 
     this.basicCooldown = Math.max(0, this.basicCooldown - dt);
     this.strongCooldown = Math.max(0, this.strongCooldown - dt);
+    this.portalCooldown = Math.max(0, this.portalCooldown - dt);
     const wasRespawning = this.player.respawnTimer > 0;
     tickPlayerStatus(this.player, dt);
     if (wasRespawning && this.player.respawnTimer === 0) this.finishRespawn();
 
-    this.updateAttack(dt);
-    this.slimes = updateSlimes(this.slimes, this.player, dt, isWorldPositionBlocked);
+    if (this.portalTransition) {
+      this.updatePortalTransition(dt);
+    } else {
+      this.updateAttack(dt);
+      const isBlocked = (x, y, radius) => isWorldPositionBlocked(this.mapId, x, y, radius);
+      this.enemies = updateEnemies(this.enemies, this.player, dt, isBlocked);
+
+      if (this.player.respawnTimer <= 0) {
+        this.applyEnemyContactDamage();
+        this.updatePlayerMovement(dt);
+        this.tryEnterPortal();
+      }
+    }
     this.updateDamageNumbers(dt);
 
-    if (this.player.respawnTimer <= 0) {
-      this.applySlimeContactDamage();
-      this.updatePlayerMovement(dt);
-    }
-
     this.updateCamera(dt);
-    this.network?.publish(this.player);
+    this.network?.publish(this.player, this.mapId);
     this.updateRemoteInterpolation(dt);
     this.updateMessage(dt);
     this.updateBiome();
@@ -224,12 +245,87 @@ export class PixelRPG {
 
     if (!this.player.moving) return;
     const nextX = this.player.x + dx * C.PLAYER_SPEED * dt;
-    if (!isWorldPositionBlocked(nextX, this.player.y, PLAYER_RADIUS)) this.player.x = nextX;
+    if (!isWorldPositionBlocked(this.mapId, nextX, this.player.y, PLAYER_RADIUS)) this.player.x = nextX;
     const nextY = this.player.y + dy * C.PLAYER_SPEED * dt;
-    if (!isWorldPositionBlocked(this.player.x, nextY, PLAYER_RADIUS)) this.player.y = nextY;
+    if (!isWorldPositionBlocked(this.mapId, this.player.x, nextY, PLAYER_RADIUS)) this.player.y = nextY;
     this.player.step += dt * 11;
     if (Math.abs(dx) > Math.abs(dy)) this.player.dir = dx > 0 ? "right" : "left";
     else this.player.dir = dy > 0 ? "down" : "up";
+  }
+
+  tryEnterPortal() {
+    if (!this.inputEnabled || this.portalCooldown > 0 || this.portalTransition) return;
+    const portal = findActivePortal(this.mapId, this.player.x, this.player.y, PLAYER_RADIUS);
+    if (!portal) return;
+    if (!portal.destination) {
+      this.portalCooldown = 1;
+      this.notify("포탈이 불안정합니다.");
+      return;
+    }
+
+    this.portalTransition = createPortalTransition(portal);
+    this.inputEnabled = false;
+    this.keys.clear();
+    this.player.moving = false;
+    const target = getWorldDefinition(portal.destination.mapId);
+    if (this.ui.portalDestination) this.ui.portalDestination.textContent = target.name;
+    if (this.ui.portalTransitionOverlay) {
+      this.ui.portalTransitionOverlay.hidden = false;
+      this.ui.portalTransitionOverlay.classList.add("active");
+    }
+  }
+
+  updatePortalTransition(dt) {
+    const tick = advancePortalTransition(this.portalTransition, dt);
+    this.portalTransition = tick.state;
+    if (tick.shouldSwap) {
+      const { mapId, x, y } = tick.state.destination;
+      this.switchWorld(mapId, x, y);
+    }
+    if (!tick.finished) return;
+
+    this.portalCooldown = tick.state.cooldownAfter;
+    this.portalTransition = null;
+    this.inputEnabled = this.player.respawnTimer <= 0;
+    if (this.ui.portalTransitionOverlay) {
+      this.ui.portalTransitionOverlay.classList.remove("active");
+      this.ui.portalTransitionOverlay.hidden = true;
+    }
+  }
+
+  switchWorld(mapId, x, y, announce = true) {
+    let world = getWorldDefinition(normalizeWorldId(mapId));
+    let targetX = x;
+    let targetY = y;
+    const invalidTarget = !Number.isFinite(targetX)
+      || !Number.isFinite(targetY)
+      || isWorldPositionBlocked(world.id, targetX, targetY, PLAYER_RADIUS);
+    if (invalidTarget) {
+      world = getWorldDefinition("village");
+      targetX = world.spawn.x;
+      targetY = world.spawn.y;
+      if (announce) this.notify("포탈이 불안정해 중앙 마을로 돌아왔습니다.");
+    }
+
+    this.mapId = world.id;
+    this.worldLayer = createWorldLayer(this.mapId);
+    this.enemies = createEnemies(this.mapId);
+    this.player.x = targetX;
+    this.player.y = targetY;
+    this.player.prevX = targetX;
+    this.player.prevY = targetY;
+    this.remotePlayers.clear();
+    this.ui.playerCount.textContent = "1";
+
+    const cameraX = clamp(targetX - innerWidth / 2, 0, Math.max(0, world.width - innerWidth));
+    const cameraY = clamp(targetY - innerHeight / 2, 0, Math.max(0, world.height - innerHeight));
+    this.camera.x = cameraX;
+    this.camera.y = cameraY;
+    this.camera.prevX = cameraX;
+    this.camera.prevY = cameraY;
+    this.drawMinimapBase();
+    this.updateBiome();
+    if (announce) this.notify(regionEntryMessage(this.mapId));
   }
 
   tryAttack(kind) {
@@ -265,24 +361,24 @@ export class PixelRPG {
 
   applyAttackHits(definition) {
     const knockbackDirection = directionVector(this.player.dir);
-    for (const slime of this.slimes) {
-      if (slime.state === "dying") continue;
-      if (!isTargetInAttackArc(this.player, this.player.dir, slime, definition.range, definition.arcDegrees)) continue;
-      const result = damageSlime(slime, definition.damage, knockbackDirection, definition.knockback);
+    for (const enemy of this.enemies) {
+      if (enemy.state === "dying") continue;
+      if (!isTargetInAttackArc(this.player, this.player.dir, enemy, definition.range, definition.arcDegrees)) continue;
+      const result = damageEnemy(enemy, definition.damage, knockbackDirection, definition.knockback);
       if (result.damageNumber) {
         this.damageNumbers.push({ ...result.damageNumber, age: 0, duration: 0.55 });
       }
     }
   }
 
-  applySlimeContactDamage() {
-    for (const slime of this.slimes) {
-      if (slime.state === "dying" || slime.contactCooldown > 0) continue;
-      const dx = this.player.x - slime.x;
-      const dy = this.player.y - slime.y;
-      if (Math.hypot(dx, dy) >= slime.radius + PLAYER_RADIUS) continue;
-      const result = this.damagePlayer(10, slime);
-      if (result.applied) slime.contactCooldown = 1;
+  applyEnemyContactDamage() {
+    for (const enemy of this.enemies) {
+      if (enemy.state === "dying" || enemy.contactCooldown > 0) continue;
+      const dx = this.player.x - enemy.x;
+      const dy = this.player.y - enemy.y;
+      if (Math.hypot(dx, dy) >= enemy.radius + PLAYER_RADIUS) continue;
+      const result = this.damagePlayer(enemy.contactDamage, enemy);
+      if (result.applied) enemy.contactCooldown = 1;
       if (result.died) break;
     }
   }
@@ -297,9 +393,9 @@ export class PixelRPG {
     const pushX = dx / length * 34;
     const pushY = dy / length * 34;
     const nextX = this.player.x + pushX;
-    if (!isWorldPositionBlocked(nextX, this.player.y, PLAYER_RADIUS)) this.player.x = nextX;
+    if (!isWorldPositionBlocked(this.mapId, nextX, this.player.y, PLAYER_RADIUS)) this.player.x = nextX;
     const nextY = this.player.y + pushY;
-    if (!isWorldPositionBlocked(this.player.x, nextY, PLAYER_RADIUS)) this.player.y = nextY;
+    if (!isWorldPositionBlocked(this.mapId, this.player.x, nextY, PLAYER_RADIUS)) this.player.y = nextY;
 
     if (result.died) {
       this.inputEnabled = false;
@@ -312,22 +408,19 @@ export class PixelRPG {
   }
 
   finishRespawn() {
-    respawnPlayer(this.player);
-    const targetX = clamp(SPAWN.x - innerWidth / 2, 0, Math.max(0, C.WORLD_WIDTH - innerWidth));
-    const targetY = clamp(SPAWN.y - innerHeight / 2, 0, Math.max(0, C.WORLD_HEIGHT - innerHeight));
-    this.camera.x = targetX;
-    this.camera.y = targetY;
-    this.camera.prevX = targetX;
-    this.camera.prevY = targetY;
+    const village = getWorldDefinition("village");
+    respawnPlayer(this.player, village.spawn);
+    this.switchWorld("village", village.spawn.x, village.spawn.y, false);
     this.ui.respawnOverlay.hidden = true;
     this.inputEnabled = true;
     this.notify("다시 모험을 시작합니다.");
   }
 
   resetCombatState() {
-    respawnPlayer(this.player);
+    const world = getWorldDefinition(this.mapId);
+    respawnPlayer(this.player, world.spawn);
     this.player.moving = false;
-    this.slimes = createSlimes();
+    this.enemies = createEnemies(this.mapId);
     this.attackState = null;
     this.basicCooldown = 0;
     this.strongCooldown = 0;
@@ -345,8 +438,9 @@ export class PixelRPG {
   }
 
   updateCamera(dt) {
-    const targetX = clamp(this.player.x - innerWidth / 2, 0, Math.max(0, C.WORLD_WIDTH - innerWidth));
-    const targetY = clamp(this.player.y - innerHeight / 2, 0, Math.max(0, C.WORLD_HEIGHT - innerHeight));
+    const world = getWorldDefinition(this.mapId);
+    const targetX = clamp(this.player.x - innerWidth / 2, 0, Math.max(0, world.width - innerWidth));
+    const targetY = clamp(this.player.y - innerHeight / 2, 0, Math.max(0, world.height - innerHeight));
     const cameraFactor = 1 - Math.exp(-C.CAMERA_LERP * dt);
     this.camera.x += (targetX - this.camera.x) * cameraFactor;
     this.camera.y += (targetY - this.camera.y) * cameraFactor;
@@ -359,7 +453,7 @@ export class PixelRPG {
   }
 
   updateBiome() {
-    const biome = getBiome(this.player.x, this.player.y);
+    const biome = getBiome(this.mapId);
     const subtitle = this.ui.playerSubtitle;
     if (subtitle.dataset.biome !== biome) {
       subtitle.dataset.biome = biome;
@@ -394,7 +488,7 @@ export class PixelRPG {
 
     const entities = [];
     this.remotePlayers.forEach(remote => entities.push({ ...remote, entityType: "player", remote: true }));
-    this.slimes.forEach(slime => entities.push({ entityType: "slime", slime, x: slime.x, y: slime.y }));
+    this.enemies.forEach(enemy => entities.push({ entityType: "enemy", enemy, x: enemy.x, y: enemy.y }));
     entities.push({
       ...this.player,
       x: lerp(this.player.prevX, this.player.x, alpha),
@@ -406,7 +500,7 @@ export class PixelRPG {
 
     for (const entity of entities) {
       if (entity.x < cameraX - 60 || entity.x > cameraX + viewW + 60 || entity.y < cameraY - 80 || entity.y > cameraY + viewH + 80) continue;
-      if (entity.entityType === "slime") drawSlime(ctx, entity.slime, cameraX, cameraY, alpha);
+      if (entity.entityType === "enemy") drawEnemy(ctx, entity.enemy, cameraX, cameraY, alpha);
       else drawPixelCharacter(ctx, entity, cameraX, cameraY, entity.remote ? null : this.attackState);
     }
 
@@ -514,22 +608,24 @@ export class PixelRPG {
   }
 
   drawMinimapBase() {
+    const world = getWorldDefinition(this.mapId);
     const context = this.minimapCtx;
     context.imageSmoothingEnabled = false;
     context.clearRect(0, 0, this.minimap.width, this.minimap.height);
-    context.drawImage(this.worldLayer, 0, 0, C.WORLD_WIDTH, C.WORLD_HEIGHT, 0, 0, this.minimap.width, this.minimap.height);
+    context.drawImage(this.worldLayer, 0, 0, world.width, world.height, 0, 0, this.minimap.width, this.minimap.height);
   }
 
   renderMinimap() {
+    const world = getWorldDefinition(this.mapId);
     const context = this.minimapCtx;
     const width = this.minimap.width, height = this.minimap.height;
     context.clearRect(0, 0, width, height);
-    context.drawImage(this.worldLayer, 0, 0, C.WORLD_WIDTH, C.WORLD_HEIGHT, 0, 0, width, height);
+    context.drawImage(this.worldLayer, 0, 0, world.width, world.height, 0, 0, width, height);
     const drawDot = (x, y, color, size) => {
       context.fillStyle = color;
-      context.fillRect(Math.round(x / C.WORLD_WIDTH * width - size / 2), Math.round(y / C.WORLD_HEIGHT * height - size / 2), size, size);
+      context.fillRect(Math.round(x / world.width * width - size / 2), Math.round(y / world.height * height - size / 2), size, size);
     };
-    this.slimes.forEach(slime => drawDot(slime.x, slime.y, "#4ade80", 4));
+    this.enemies.forEach(enemy => drawDot(enemy.x, enemy.y, enemy.color, 4));
     this.remotePlayers.forEach(player => drawDot(player.x, player.y, "#f8fafc", 3));
     drawDot(this.player.x, this.player.y, "#ff4d6d", 5);
   }
@@ -625,6 +721,14 @@ function drawAttackEffect(ctx, player, attackState, cameraX, cameraY, alpha) {
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function lerp(a, b, t) { return a + (b - a) * t; }
 function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+function regionEntryMessage(mapId) {
+  return {
+    village: "중앙 마을 안전지대입니다.",
+    volcano: "화산의 열기와 화염 슬라임을 조심하세요.",
+    forest: "숲길의 몬스터를 조심하세요.",
+    coast: "해안의 게와 물방울 슬라임을 조심하세요.",
+  }[mapId] || "중앙 마을 안전지대입니다.";
+}
 function sanitizeName(value) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, 12) || "모험가" : "모험가";
 }

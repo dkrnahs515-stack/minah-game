@@ -1,4 +1,5 @@
 import { FIREBASE_CONFIG, GAME_CONFIG as C, ROOM_ID } from "./config.js";
+import { filterPlayersForMap, serializePlayerState } from "./network-state.js";
 
 const emptyAdapter = {
   mode: "offline",
@@ -36,13 +37,14 @@ export async function createNetworkAdapter(onPlayersChanged, onStatusChanged) {
     await disconnect.remove();
 
     let stopped = false;
+    let activeMapId = "village";
+    let rawPlayers = {};
+    const emitVisiblePlayers = () => {
+      onPlayersChanged?.(filterPlayersForMap(rawPlayers, uid, activeMapId));
+    };
     const unsubscribePlayers = dbModule.onValue(playersRef, snapshot => {
-      const raw = snapshot.val() || {};
-      const players = new Map();
-      Object.entries(raw).forEach(([id, player]) => {
-        if (id !== uid && Number.isFinite(player?.x) && Number.isFinite(player?.y)) players.set(id, player);
-      });
-      onPlayersChanged?.(players);
+      rawPlayers = snapshot.val() || {};
+      emitVisiblePlayers();
     });
 
     const unsubscribeConnected = dbModule.onValue(connectedRef, snapshot => {
@@ -51,18 +53,17 @@ export async function createNetworkAdapter(onPlayersChanged, onStatusChanged) {
     });
 
     let lastPublish = 0;
-    const publish = state => {
+    const publish = (state, mapId = "village") => {
       if (stopped) return;
+      if (mapId !== activeMapId) {
+        activeMapId = mapId;
+        emitVisiblePlayers();
+      }
       const now = performance.now();
       if (now - lastPublish < 1000 / C.NETWORK_SEND_HZ) return;
       lastPublish = now;
       dbModule.update(playerRef, {
-        x: Math.round(state.x * 10) / 10,
-        y: Math.round(state.y * 10) / 10,
-        dir: state.dir,
-        moving: state.moving,
-        color: state.color,
-        name: state.name,
+        ...serializePlayerState(state, activeMapId),
         updatedAt: dbModule.serverTimestamp(),
       }).catch(error => console.warn("플레이어 위치 전송 실패", error));
     };
