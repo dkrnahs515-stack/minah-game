@@ -8,6 +8,27 @@
 
 **기술 구성:** HTML5 Canvas, 네이티브 JavaScript ES 모듈, Firebase Authentication/Realtime Database 12.16.0, Node.js `node:test`, Playwright 브라우저 스모크 테스트, GitHub Pages/Firebase Hosting.
 
+## 구현 검토 반영 사항
+
+2026-08-05 코드 검토 승인에 따라 아래 보완사항을 적용했습니다. 이후의 초기 코드 예시보다 실제 구현 파일과 이 목록을 우선 기준으로 사용합니다.
+
+- 메시지 80자는 `Intl.Segmenter`의 grapheme 단위로 검사해 복합 이모지를 분리하지 않습니다.
+- 80자 초과 메시지는 조용히 자르지 않고 오류로 안내합니다.
+- 새 메시지 추가와 오래된 메시지 삭제를 하나의 Firebase `update()`로 처리합니다.
+- UID별 채팅 규칙에 객체 구조와 최대 5개 하위 메시지 제한을 추가했습니다.
+- `.info/connected`가 다시 `true`가 될 때 플레이어와 채팅의 `onDisconnect()`를 모두 재등록합니다.
+- 전송 중에는 입력을 잠가 빠른 Enter로 중복 요청이 발생하지 않도록 합니다.
+- 좁고 낮은 화면에서도 상자가 안전 영역을 넘지 않도록 표시 가능 줄 수를 자동 축소합니다.
+- 실제 브라우저에서 온라인 가짜 Firebase 전송·입력 차단·Escape 우선순위와 기존 네 지역 포탈 회귀를 검증합니다.
+
+## 구현 커밋
+
+- `254c923`: 전체 채팅 상태 로직
+- `6d221d3`: 말풍선 화면 경계 배치
+- `223e439`: Firebase 전체 채팅 동기화와 보안 규칙
+- `4e5217d`: 전체 채팅 UI 컨트롤러
+- `2bd705e`: 플레이어 채팅 말풍선 통합
+
 ## 전체 공통 제약사항
 
 - 채팅 범위는 `village`, `volcano`, `forest`, `coast` 전 지역이 공유하는 `public` 방 전체입니다.
