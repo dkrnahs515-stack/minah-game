@@ -96,7 +96,7 @@ const villagePortals = [
     destination: { mapId: "forest", x: 2160, y: 3260 } },
   { id: "to-volcano", x: 2214, y: 410, w: 96, h: 96, label: "활화산", color: "#ff7043",
     destination: { mapId: "volcano", x: 2160, y: 3260 } },
-  { id: "to-coast", x: 1392, y: 1500, w: 96, h: 96, label: "해안가", color: "#38bdf8",
+  { id: "to-coast", x: 1392, y: 1620, w: 96, h: 96, label: "해안가", color: "#38bdf8",
     destination: { mapId: "coast", x: 2160, y: 340 } },
 ];
 
@@ -209,7 +209,6 @@ git commit -m "10배 지역 월드 정의 추가"
 
 **Files:**
 - Modify: `src/world.js`
-- Modify: `src/config.js`
 - Modify: `tests/collision.test.mjs`
 - Create: `tests/world.test.mjs`
 
@@ -242,7 +241,7 @@ test("포탈 영역과 표시 지역명을 반환한다", () => {
 });
 ```
 
-기존 `tests/collision.test.mjs`의 월드 충돌 호출에는 첫 인자로 `"village"`를 추가한다.
+기존 `tests/collision.test.mjs`에서는 `pointInRect`와 `distanceToSegment`의 일반 충돌 보조 함수 테스트를 유지하고, 이전 사막·강·다리 좌표를 검사하던 월드 전용 두 테스트를 제거한다. 새 지역 충돌 동작은 `tests/world.test.mjs`가 대체한다.
 
 - [ ] **Step 2: 기존 함수 서명 때문에 실패하는 것을 확인한다**
 
@@ -293,7 +292,7 @@ export function createWorldLayer(mapId) {
 
 `drawVillage`은 잔디 바탕, 중앙 광장, 북쪽 회관, 서쪽 밭과 헛간, 동쪽 상점·대장간, 남쪽 무역소를 그린다. `drawVolcano`는 `#272124` 현무암 바탕과 `#f04b24` 용암, `drawForest`는 `#285b38` 숲 바탕과 수목·연못, `drawCoast`는 `#d7bd75` 모래와 `#2f9bc5` 바다를 사용한다. 각 함수는 정의된 장애물 사각형을 같은 좌표로 그려 시각 지형과 충돌 지형을 일치시킨다. `drawPortals`는 각 포탈 사각형 안에 세 겹의 색상 사각형과 목적지 이름을 그린다.
 
-`src/config.js`에서는 `WORLD_WIDTH`, `WORLD_HEIGHT`를 제거하고 나머지 성능·입력 상수를 유지한다.
+`WORLD_WIDTH`, `WORLD_HEIGHT`는 Task 5가 모든 게임 루프 참조를 지역 정의로 교체할 때까지 `src/config.js`에 유지하여 중간 커밋에서도 기존 게임을 실행할 수 있게 한다.
 
 - [ ] **Step 4: 충돌과 월드 테스트를 통과시킨다**
 
@@ -304,7 +303,7 @@ Expected: all tests pass.
 - [ ] **Step 5: 지역 월드 렌더링을 커밋한다**
 
 ```powershell
-git add src/world.js src/config.js tests/collision.test.mjs tests/world.test.mjs
+git add src/world.js tests/collision.test.mjs tests/world.test.mjs
 git commit -m "지역별 지형과 포탈 충돌 구현"
 ```
 
@@ -529,6 +528,7 @@ git commit -m "지역별 멀티플레이 동기화 추가"
 - Create: `src/portal-transition.js`
 - Create: `tests/portal-transition.test.mjs`
 - Modify: `src/game.js`
+- Modify: `src/config.js`
 - Modify: `src/player-combat.js`
 - Modify: `tests/player-combat.test.mjs`
 
@@ -604,7 +604,8 @@ this.portalCooldown = Math.max(0, this.portalCooldown - dt);
 this.updatePortalTransition(dt);
 if (!this.portalTransition) {
   this.updateAttack(dt);
-  this.enemies = updateEnemies(this.enemies, this.player, dt, this.isBlocked);
+  const isBlocked = (x, y, radius) => isWorldPositionBlocked(this.mapId, x, y, radius);
+  this.enemies = updateEnemies(this.enemies, this.player, dt, isBlocked);
   if (this.player.respawnTimer <= 0) {
     this.applyEnemyContactDamage();
     this.updatePlayerMovement(dt);
@@ -621,7 +622,7 @@ this.network?.publish(this.player, this.mapId);
 
 - [ ] **Step 6: 카메라와 미니맵을 현재 지역 크기로 변경한다**
 
-`updateCamera`, `finishRespawn`, `drawMinimapBase`, `renderMinimap`에서 전역 크기 대신 `getWorldDefinition(this.mapId).width/height`를 사용한다. 원격 플레이어와 몬스터는 현재 지역 좌표만 그린다.
+`updateCamera`, `finishRespawn`, `drawMinimapBase`, `renderMinimap`에서 전역 크기 대신 `getWorldDefinition(this.mapId).width/height`를 사용한다. 이동과 플레이어 넉백도 `(x, y, radius) => isWorldPositionBlocked(this.mapId, x, y, radius)`를 사용한다. 모든 참조가 교체되면 `src/config.js`의 `WORLD_WIDTH`, `WORLD_HEIGHT`를 제거한다. 원격 플레이어와 몬스터는 현재 지역 좌표만 그린다.
 
 - [ ] **Step 7: 외부 지역 사망 시 중앙 마을에서 부활시킨다**
 
@@ -636,7 +637,7 @@ Expected: all tests pass, including existing input, combat, FPS, damage and coll
 - [ ] **Step 9: 포탈과 게임 루프를 커밋한다**
 
 ```powershell
-git add src/portal-transition.js src/game.js src/player-combat.js tests/portal-transition.test.mjs tests/player-combat.test.mjs
+git add src/portal-transition.js src/game.js src/config.js src/player-combat.js tests/portal-transition.test.mjs tests/player-combat.test.mjs
 git commit -m "포탈 전환과 중앙 마을 부활 통합"
 ```
 
