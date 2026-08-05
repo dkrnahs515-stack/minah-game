@@ -15,6 +15,7 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 body { user-select: none; }
 canvas { display: block; }
 button, input { font: inherit; }
+.sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 #game { width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
 .hud { position: fixed; inset: 0; pointer-events: none; color: var(--text); text-shadow: 0 2px 3px rgba(0,0,0,.75); }
 .glass { border: 1px solid var(--line); background: var(--panel); backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0,0,0,.22); }
@@ -39,6 +40,22 @@ button, input { font: inherit; }
 .performance-panel b { color: #fff; }
 .message { position: absolute; top: 68px; left: 50%; max-width: min(80vw,640px); transform: translateX(-50%) translateY(-6px); padding: 10px 16px; border: 1px solid rgba(255,255,255,.2); border-radius: 999px; background: var(--panel-strong); opacity: 0; transition: opacity .15s ease, transform .15s ease; font-size: 13px; font-weight: 800; }
 .message.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.chat-panel { pointer-events: auto; position: absolute; left: 14px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 10; display: grid; grid-template-rows: auto minmax(72px,1fr) auto; width: min(360px,calc(100vw - 28px)); height: min(230px,32vh); min-height: 168px; overflow: hidden; border-radius: 14px; text-shadow: none; }
+.chat-panel header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 11px; border-bottom: 1px solid rgba(255,255,255,.12); font-size: 12px; }
+.chat-status { padding: 3px 7px; border-radius: 999px; font-size: 10px; font-weight: 900; }
+.chat-status.offline, .chat-status.error { color: #fecaca; background: rgba(127,29,29,.78); }
+.chat-status.connecting { color: #fde68a; background: rgba(120,53,15,.78); }
+.chat-status.online { color: #bbf7d0; background: rgba(20,83,45,.78); }
+.chat-messages { min-height: 0; margin: 0; padding: 8px 10px; overflow: auto; list-style: none; user-select: text; scrollbar-width: thin; }
+.chat-messages li { display: grid; grid-template-columns: max-content minmax(0,1fr); gap: 7px; margin: 0 0 5px; color: #e5edf7; font-size: 12px; line-height: 1.35; }
+.chat-messages b { max-width: 88px; overflow: hidden; color: #99f6e4; text-overflow: ellipsis; white-space: nowrap; }
+.chat-messages span { overflow-wrap: anywhere; }
+.chat-form { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px; padding: 8px; border-top: 1px solid rgba(255,255,255,.12); }
+.chat-form input { min-width: 0; padding: 8px 9px; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; outline: none; background: rgba(3,8,18,.64); color: white; user-select: text; font-size: 12px; }
+.chat-form input:focus { border-color: rgba(129,230,217,.75); box-shadow: 0 0 0 3px rgba(45,212,191,.12); }
+.chat-form input:disabled { cursor: not-allowed; opacity: .62; }
+.chat-form button { padding: 7px 10px; border: 0; border-radius: 8px; background: #2dd4bf; color: #062721; cursor: pointer; font-size: 11px; font-weight: 900; }
+.chat-form button:disabled { cursor: not-allowed; filter: grayscale(.75); opacity: .55; }
 .minimap { position: absolute; top: 14px; right: 14px; width: 220px; border-radius: 14px; overflow: hidden; }
 #minimap { width: 220px; height: 140px; image-rendering: pixelated; }
 .minimap-label { padding: 5px 9px 7px; color: var(--muted); font-size: 11px; text-align: right; }
@@ -106,6 +123,7 @@ kbd { min-width: 23px; padding: 2px 5px; border: 1px solid rgba(255,255,255,.35)
   .slot-group { gap: 4px; padding: 6px; }
   .hotbar { gap: 7px; }
   .player-panel { width: 310px; }
+  .chat-panel { width: min(330px,calc(100vw - 28px)); height: min(205px,30vh); }
 }
 @media (max-width: 520px) {
   .player-panel { width: calc(100% - 28px); }
@@ -114,4 +132,7 @@ kbd { min-width: 23px; padding: 2px 5px; border: 1px solid rgba(255,255,255,.35)
   .slot { width: 46px; height: 46px; }
   .slot .empty { display: none; }
   .modal-card { padding: 23px 20px; }
+  .chat-panel { bottom: calc(76px + env(safe-area-inset-bottom)); width: calc(100vw - 28px); height: min(180px,27vh); min-height: 150px; }
+  .chat-messages { padding: 7px 8px; }
+  .chat-form { padding: 7px; }
 }
