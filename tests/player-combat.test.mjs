@@ -62,3 +62,14 @@ test("respawn restores position, HP, MP, and frame history", () => {
   assert.equal(target.mp, 100);
   assert.equal(target.respawnTimer, 0);
 });
+
+test("respawn accepts the safe-world spawn selected by the game", () => {
+  const target = player({ hp: 0, mp: 0, respawnTimer: 0.01 });
+  respawnPlayer(target, { x: 320, y: 480 });
+  assert.deepEqual(
+    { x: target.x, y: target.y, prevX: target.prevX, prevY: target.prevY },
+    { x: 320, y: 480, prevX: 320, prevY: 480 },
+  );
+  assert.equal(target.hp, 100);
+  assert.equal(target.mp, 100);
+});

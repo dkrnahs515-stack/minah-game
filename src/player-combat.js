@@ -17,11 +17,11 @@ export function tickPlayerStatus(player, dt) {
   if (player.respawnTimer > 0) player.respawnTimer = Math.max(0, player.respawnTimer - dt);
 }
 
-export function respawnPlayer(player) {
-  player.x = 1440;
-  player.y = 1110;
-  player.prevX = 1440;
-  player.prevY = 1110;
+export function respawnPlayer(player, spawn = { x: 1440, y: 1110 }) {
+  player.x = spawn.x;
+  player.y = spawn.y;
+  player.prevX = spawn.x;
+  player.prevY = spawn.y;
   player.hp = player.maxHp;
   player.mp = player.maxMp;
   player.invulnerable = 0;

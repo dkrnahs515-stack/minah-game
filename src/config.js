@@ -1,8 +1,6 @@
 import { FIREBASE_CONFIG } from "./firebase-config.js";
 
 export const GAME_CONFIG = Object.freeze({
-  WORLD_WIDTH: 2880,
-  WORLD_HEIGHT: 1800,
   TILE: 32,
   SIMULATION_HZ: 144,
   PLAYER_SPEED: 245,
