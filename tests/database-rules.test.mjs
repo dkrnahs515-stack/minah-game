@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("채팅 규칙은 기존 플레이어 검증을 보존하고 작성자·구조·개수를 제한한다", async () => {
+test("채팅 규칙은 기존 플레이어 검증을 보존하고 작성자와 메시지 구조를 제한한다", async () => {
   const rules = JSON.parse(await readFile(new URL("../database.rules.json", import.meta.url), "utf8"));
   const room = rules.rules.rooms.$roomId;
   assert.match(room.players.$uid[".validate"], /mapId/);
