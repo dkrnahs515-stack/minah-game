@@ -13,7 +13,7 @@
           ".read": "auth != null",
           "$uid": {
             ".write": "auth != null && auth.uid === $uid",
-            ".validate": "newData.hasChildren() && newData.numChildren() <= 5",
+            ".validate": "newData.hasChildren()",
             "$messageId": {
               ".validate": "newData.hasChildren(['text','name','mapId','createdAt'])",
               "text": {
