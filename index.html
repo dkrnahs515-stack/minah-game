@@ -80,6 +80,20 @@
 
     <div id="message" class="message">대륙을 탐험해 보세요.</div>
 
+    <section id="chatPanel" class="chat-panel glass" aria-label="전체 월드 채팅">
+      <header>
+        <strong>전체 월드</strong>
+        <span id="chatStatus" class="chat-status offline">오프라인</span>
+      </header>
+      <ol id="chatMessages" class="chat-messages" aria-live="polite" aria-relevant="additions"></ol>
+      <form id="chatForm" class="chat-form" autocomplete="off">
+        <label class="sr-only" for="chatInput">전체 월드 메시지</label>
+        <input id="chatInput" type="text" maxlength="1024" placeholder="Enter로 채팅 · 최대 80자" aria-describedby="chatHint" disabled />
+        <small id="chatHint" class="sr-only">한글, 영문, 이모지를 포함해 최대 80자까지 입력할 수 있습니다.</small>
+        <button type="submit" aria-label="메시지 보내기" disabled>전송</button>
+      </form>
+    </section>
+
     <section class="minimap glass" aria-label="미니맵">
       <canvas id="minimap" width="220" height="140"></canvas>
       <div class="minimap-label">세계 지도</div>
@@ -91,6 +105,7 @@
       <div><kbd>Q</kbd><span>강한 공격</span></div>
       <div><kbd>E</kbd><kbd>R</kbd><span>빈 스킬</span></div>
       <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><span>아이템</span></div>
+      <div><kbd>Enter</kbd><span>전체 채팅</span></div>
       <div><kbd>Esc</kbd><span>나가기</span></div>
     </section>
 

@@ -1,4 +1,7 @@
 import { GAME_CONFIG as C } from "./config.js";
+import { layoutChatBubble, worldToScreen } from "./chat-bubble-layout.js";
+import { ChatController } from "./chat-controller.js";
+import { latestBubblesByUid } from "./chat-state.js";
 import { attackDefinition, directionVector, isTargetInAttackArc } from "./combat.js";
 import { createEnemies, damageEnemy, drawEnemy, updateEnemies } from "./enemies.js";
 import { movementVector } from "./input.js";
@@ -59,6 +62,23 @@ export class PixelRPG {
     this.fpsSamples = [];
     this.lastFpsUpdate = 0;
     this.messageTimer = 0;
+    this.chatMessages = [];
+    this.chatInputActive = false;
+    this.chat = new ChatController({
+      panel: elements.chatPanel,
+      list: elements.chatMessages,
+      form: elements.chatForm,
+      input: elements.chatInput,
+      status: elements.chatStatus,
+      onSend: text => this.sendChat(text),
+      onTypingChange: active => {
+        this.chatInputActive = active;
+        if (active) {
+          this.keys.clear();
+          this.player.moving = false;
+        }
+      },
+    });
     this.renderScale = Math.min(devicePixelRatio || 1, C.MAX_DPR);
     this.lowFpsSeconds = 0;
     this.highFpsSeconds = 0;
@@ -82,10 +102,13 @@ export class PixelRPG {
     this.drawMinimapBase();
 
     if (this.network) await this.network.stop();
-    this.network = await createNetworkAdapter(
-      players => this.receiveRemotePlayers(players),
-      (status, label) => this.updateNetworkStatus(status, label),
-    );
+    this.chat.reset();
+    this.chatMessages = [];
+    this.network = await createNetworkAdapter({
+      onPlayersChanged: players => this.receiveRemotePlayers(players),
+      onStatusChanged: (status, label) => this.updateNetworkStatus(status, label),
+      onChatMessagesChanged: messages => this.receiveChatMessages(messages),
+    });
 
     this.running = true;
     this.lastFrame = 0;
@@ -106,6 +129,10 @@ export class PixelRPG {
     const network = this.network;
     this.network = null;
     if (network) await network.stop();
+
+    this.chat.reset();
+    this.chatMessages = [];
+    this.chatInputActive = false;
 
     this.remotePlayers.clear();
     this.portalTransition = null;
@@ -133,7 +160,7 @@ export class PixelRPG {
     addEventListener("resize", () => this.resize(), { passive: true });
     addEventListener("blur", () => this.keys.clear());
     addEventListener("keydown", event => {
-      if (!this.running || !this.inputEnabled || isTypingTarget(event.target)) return;
+      if (!this.running || !this.inputEnabled || this.chatInputActive || isTypingTarget(event.target)) return;
 
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) {
         this.keys.add(event.code);
@@ -238,7 +265,9 @@ export class PixelRPG {
   }
 
   updatePlayerMovement(dt) {
-    const movement = this.inputEnabled ? movementVector(this.keys) : { x: 0, y: 0 };
+    const movement = this.inputEnabled && !this.chatInputActive
+      ? movementVector(this.keys)
+      : { x: 0, y: 0 };
     const dx = movement.x;
     const dy = movement.y;
     this.player.moving = Boolean(dx || dy);
@@ -251,6 +280,31 @@ export class PixelRPG {
     this.player.step += dt * 11;
     if (Math.abs(dx) > Math.abs(dy)) this.player.dir = dx > 0 ? "right" : "left";
     else this.player.dir = dy > 0 ? "down" : "up";
+  }
+
+  openChatInput() {
+    return this.chat.open();
+  }
+
+  cancelChatInput() {
+    return this.chat.cancel();
+  }
+
+  isChatTyping() {
+    return this.chat.isTyping();
+  }
+
+  async sendChat(text) {
+    return this.network?.chat?.send({
+      text,
+      name: this.player.name,
+      mapId: this.mapId,
+    }) || { ok: false, error: "채팅 서버가 오프라인입니다." };
+  }
+
+  receiveChatMessages(messages) {
+    this.chatMessages = Array.isArray(messages) ? messages : [];
+    this.chat.renderMessages(this.chatMessages);
   }
 
   tryEnterPortal() {
@@ -491,6 +545,7 @@ export class PixelRPG {
     this.enemies.forEach(enemy => entities.push({ entityType: "enemy", enemy, x: enemy.x, y: enemy.y }));
     entities.push({
       ...this.player,
+      uid: this.network?.uid || "local-player",
       x: lerp(this.player.prevX, this.player.x, alpha),
       y: lerp(this.player.prevY, this.player.y, alpha),
       entityType: "player",
@@ -498,14 +553,23 @@ export class PixelRPG {
     });
     entities.sort((a, b) => a.y - b.y);
 
+    const visiblePlayers = [];
     for (const entity of entities) {
       if (entity.x < cameraX - 60 || entity.x > cameraX + viewW + 60 || entity.y < cameraY - 80 || entity.y > cameraY + viewH + 80) continue;
       if (entity.entityType === "enemy") drawEnemy(ctx, entity.enemy, cameraX, cameraY, alpha);
-      else drawPixelCharacter(ctx, entity, cameraX, cameraY, entity.remote ? null : this.attackState);
+      else {
+        drawPixelCharacter(ctx, entity, cameraX, cameraY, entity.remote ? null : this.attackState);
+        visiblePlayers.push(entity);
+      }
     }
 
     if (this.attackState) drawAttackEffect(ctx, this.player, this.attackState, cameraX, cameraY, alpha);
     this.drawDamageNumbers(ctx, cameraX, cameraY);
+    const bubbles = latestBubblesByUid(this.chatMessages, { mapId: this.mapId, now: Date.now() });
+    for (const entity of visiblePlayers) {
+      const message = bubbles.get(entity.uid);
+      if (message) drawChatBubble(ctx, entity, message, cameraX, cameraY, viewW, viewH);
+    }
     this.renderMinimap();
   }
 
@@ -579,6 +643,7 @@ export class PixelRPG {
     const badge = this.ui.networkBadge;
     badge.className = `status ${status}`;
     badge.textContent = label;
+    this.chat.setMode(status === "online" ? "online" : status, status === "online" ? "전체 채팅" : label);
   }
 
   measurePerformance(timestamp, frameSeconds) {
@@ -629,6 +694,57 @@ export class PixelRPG {
     this.remotePlayers.forEach(player => drawDot(player.x, player.y, "#f8fafc", 3));
     drawDot(this.player.x, this.player.y, "#ff4d6d", 5);
   }
+}
+
+function drawChatBubble(ctx, player, message, cameraX, cameraY, viewportWidth, viewportHeight) {
+  const bob = player.moving ? Math.sin(player.step) * 1.6 : 0;
+  const screen = worldToScreen({
+    worldX: player.x,
+    worldY: player.y + bob,
+    cameraX,
+    cameraY,
+    zoom: 1,
+  });
+  const anchor = {
+    x: screen.x,
+    topY: screen.y + (player.remote ? -48 : -31),
+    bottomY: screen.y + 19,
+  };
+
+  ctx.save();
+  ctx.font = "700 12px Inter, Pretendard, Arial, sans-serif";
+  const layout = layoutChatBubble({
+    text: message.text,
+    measureText: text => ctx.measureText(text).width,
+    anchor,
+    viewportWidth,
+    viewportHeight,
+  });
+  const { box, tail, lines } = layout;
+  ctx.fillStyle = "rgba(8,15,28,.94)";
+  ctx.strokeStyle = "rgba(255,255,255,.28)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  if (typeof ctx.roundRect === "function") ctx.roundRect(box.x, box.y, box.width, box.height, 8);
+  else ctx.rect(box.x, box.y, box.width, box.height);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(tail.x - 7, tail.y);
+  ctx.lineTo(tail.x + 7, tail.y);
+  ctx.lineTo(tail.x, tail.y + (tail.direction === "down" ? tail.height : -tail.height));
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#f8fafc";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  lines.forEach((line, index) => {
+    ctx.fillText(line, box.x + box.paddingX, box.y + box.paddingY + index * box.lineHeight + 1);
+  });
+  ctx.restore();
 }
 
 function drawPixelCharacter(ctx, player, cameraX, cameraY, attackState = null) {

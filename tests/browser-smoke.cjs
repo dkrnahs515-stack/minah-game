@@ -38,6 +38,13 @@ async function expectRegion(page, regionName) {
     await page.locator("#enterButton").click();
     await page.locator("#hud").waitFor({ state: "visible" });
     await expectRegion(page, "중앙 마을");
+    assert.match(await page.locator("#chatStatus").textContent(), /연결 실패|오프라인/);
+    await page.keyboard.press("Enter");
+    assert.equal(await page.locator("#chatInput").evaluate(element => document.activeElement === element), false);
+    await page.keyboard.press("Escape");
+    assert.equal(await page.locator("#exitOverlay").isVisible(), true);
+    await page.keyboard.press("Escape");
+    assert.equal(await page.locator("#exitOverlay").isVisible(), false);
     if (screenshotDirectory) await page.screenshot({ path: path.join(screenshotDirectory, "02-village.png") });
 
     await move(page, "ArrowUp", 2300);

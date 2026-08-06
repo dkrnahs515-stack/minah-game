@@ -1,4 +1,5 @@
 import { PixelRPG } from "./game.js";
+import { chatKeyAction } from "./chat-controller.js";
 
 const elements = {
   canvas: document.querySelector("#game"),
@@ -19,6 +20,11 @@ const elements = {
   strongCooldown: document.querySelector("#strongCooldown"),
   portalTransitionOverlay: document.querySelector("#portalTransitionOverlay"),
   portalDestination: document.querySelector("#portalDestination"),
+  chatPanel: document.querySelector("#chatPanel"),
+  chatMessages: document.querySelector("#chatMessages"),
+  chatForm: document.querySelector("#chatForm"),
+  chatInput: document.querySelector("#chatInput"),
+  chatStatus: document.querySelector("#chatStatus"),
 };
 
 const game = new PixelRPG(elements);
@@ -92,6 +98,23 @@ confirmExitButton.addEventListener("click", async () => {
 });
 
 addEventListener("keydown", event => {
+  if (!["Enter", "Escape"].includes(event.code)) return;
+  const action = chatKeyAction({
+    code: event.code,
+    typing: game.isChatTyping(),
+    running: game.isRunning(),
+    exitOpen: !exitOverlay.hidden,
+  });
+  if (action === "open") {
+    event.preventDefault();
+    game.openChatInput();
+    return;
+  }
+  if (action === "cancel") {
+    event.preventDefault();
+    game.cancelChatInput();
+    return;
+  }
   if (event.code !== "Escape") return;
   if (!exitOverlay.hidden) {
     closeExitDialog();
@@ -106,6 +129,7 @@ addEventListener("pagehide", () => {
 
 function openExitDialog() {
   if (!game.isRunning()) return;
+  game.cancelChatInput();
   game.setInputEnabled(false);
   exitOverlay.hidden = false;
   cancelExitButton.focus();

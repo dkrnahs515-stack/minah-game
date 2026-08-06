@@ -12,6 +12,7 @@ Firebase 프로젝트: `pixel-world-8cb9b`
 - Firebase Hosting GitHub Actions 워크플로 추가
 - 익명 인증 및 Realtime Database 클라이언트 코드 구현
 - 원격 플레이어 위치 보간 및 접속 종료 자동 삭제 구현
+- 전체 월드 채팅, 플레이어 말풍선 및 접속 종료 시 채팅 자동 삭제 구현
 
 ## 1. 익명 로그인 활성화
 
@@ -40,6 +41,8 @@ databaseURL: "https://pixel-world-8cb9b-default-rtdb.REGION.firebasedatabase.app
 ```bash
 firebase deploy --only database
 ```
+
+이 명령은 운영 Realtime Database 규칙을 즉시 변경합니다. 로컬 테스트와 보안 검사를 완료하고 배포 승인을 받은 뒤 실행해야 합니다. 채팅 클라이언트만 먼저 배포하고 규칙을 배포하지 않으면 채팅 쓰기가 거부됩니다.
 
 ## 4. Firebase Hosting 자동 배포 연결
 
@@ -84,6 +87,19 @@ firebase deploy --only hosting,database
 - 같은 `mapId`에 있는 원격 캐릭터만 보간하여 부드럽게 표시
 - 이전 데이터에 `mapId`가 없으면 중앙 마을(`village`)로 처리
 - 접속 종료 시 `onDisconnect().remove()`로 플레이어 데이터 삭제
+- `rooms/public/chat/{uid}/{messageId}`에 전체 월드 채팅 저장
+- UID별 메시지는 최대 5개이며 새 메시지 추가와 오래된 메시지 삭제를 한 번의 원자적 갱신으로 처리
+- `rooms/public/chat` 전체를 구독하므로 지역이 달라도 채팅 패널에서는 메시지 확인 가능
+- 캐릭터 말풍선은 같은 `mapId`의 최신 메시지만 4초간 표시
+- 재연결 시 플레이어와 채팅의 `onDisconnect().remove()`를 다시 예약
 - `database.rules.json`에서 본인 데이터만 수정 가능
 
 지역 ID는 `village`, `volcano`, `forest`, `coast`만 허용됩니다. 보안 규칙은 중앙 마을 좌표를 `2,880 × 1,800`, 외부 지역 좌표를 `4,320 × 3,600` 안으로 제한합니다. 월드 확장 코드를 배포할 때 갱신된 `database.rules.json`도 함께 게시해야 온라인 이동이 거부되지 않습니다.
+
+## Firebase 키와 보안 점검
+
+- `src/firebase-config.js`의 Firebase 웹 API 키는 브라우저에서 사용하는 공개 전제 식별자입니다.
+- Firebase Admin SDK 개인 키 또는 서비스 계정 JSON 값은 소스코드에 저장하지 않습니다.
+- GitHub Actions 워크플로에는 `${{ secrets.FIREBASE_SERVICE_ACCOUNT_PIXEL_WORLD_8CB9B }}` 참조만 저장하고 실제 값은 GitHub Actions Secret에서 관리합니다.
+- Realtime Database 규칙은 인증된 사용자만 읽고, 각 사용자가 자신의 UID 아래 데이터만 수정하도록 제한합니다.
+- Google Cloud HTTP 리퍼러 제한, Firebase App Check, GitHub Secret scanning 상태는 각 서비스 콘솔에서 별도로 확인합니다.
