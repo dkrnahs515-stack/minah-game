@@ -8,7 +8,8 @@ test("채팅 규칙은 기존 플레이어 검증을 보존하고 작성자·구
   assert.match(room.players.$uid[".validate"], /mapId/);
   assert.equal(room.chat[".read"], "auth != null");
   assert.match(room.chat.$uid[".write"], /auth\.uid === \$uid/);
-  assert.match(room.chat.$uid[".validate"], /numChildren\(\) <= 5/);
+  assert.equal(room.chat.$uid[".validate"], "newData.hasChildren()");
+  assert.doesNotMatch(room.chat.$uid[".validate"], /numChildren/);
   const message = room.chat.$uid.$messageId;
   assert.match(message[".validate"], /hasChildren/);
   assert.match(message.text[".validate"], /length <= 1024/);
