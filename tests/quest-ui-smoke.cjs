@@ -14,6 +14,27 @@ test("첫 퀘스트 UI와 F 조작 안내가 연결된다", () => {
   assert.match(game, /recordQuestKill/);
 });
 
+test("HUD는 레벨 진행 EXP 막대와 Gold를 표시한다", () => {
+  const html = readFileSync(path.join(__dirname, "../index.html"), "utf8");
+  const main = readFileSync(path.join(__dirname, "../src/main.js"), "utf8");
+  const css = readFileSync(path.join(__dirname, "../styles.css"), "utf8");
+
+  assert.match(html, /id="expText">0 \/ 100/);
+  assert.match(html, /id="expBar"/);
+  assert.match(html, /id="goldText">0 G/);
+  assert.match(main, /expBar:\s*document\.querySelector\("#expBar"\)/);
+  assert.match(main, /goldText:\s*document\.querySelector\("#goldText"\)/);
+  assert.match(css, /\.bar\.exp/);
+});
+
+test("적 처치 보상과 레벨 능력치가 게임에 연결된다", () => {
+  const game = readFileSync(path.join(__dirname, "../src/game.js"), "utf8");
+  assert.match(game, /grantSlimeReward/);
+  assert.match(game, /statsForLevel/);
+  assert.match(game, /recordEnemyKill/);
+  assert.match(game, /LEVEL UP!/);
+});
+
 test("대화 중 Enter는 주요 행동에 남고 Escape만 대화를 닫는다", async () => {
   const { dialogueKeyAction } = await import("../src/game.js");
 
@@ -48,4 +69,19 @@ test("좁은 화면에서 퀘스트와 대화 안내는 채팅 패널을 피한�
   assert.match(css, /@media \(max-width:\s*620px\)[\s\S]*?\.quest-tracker \{[^}]*width:\s*calc\(100% - 28px\)/);
   assert.match(css, /@media \(max-width:\s*620px\)\s*\{(?:(?!@media)[\s\S])*?\.performance-panel \{[^}]*display:\s*none/);
   assert.match(css, /@media \(max-width:\s*520px\)[\s\S]*?\.npc-prompt \{[^}]*bottom:\s*calc\(266px \+ env\(safe-area-inset-bottom\)\)/);
+});
+
+test("반응형 HUD는 확장된 플레이어 패널 아래에 보조 패널을 쌓는다", () => {
+  const css = readFileSync(path.join(__dirname, "../styles.css"), "utf8");
+  const stackTop = css.match(/--player-panel-stack-top:\s*(\d+)px/)?.[1];
+
+  assert.ok(Number(stackTop) >= 214, "stack offset must clear the measured player panel");
+  assert.match(
+    css,
+    /@media \(max-width:\s*900px\)[\s\S]*?\.performance-panel \{[^}]*top:\s*var\(--player-panel-stack-top\)/,
+  );
+  assert.match(
+    css,
+    /@media \(max-width:\s*620px\)[\s\S]*?\.quest-tracker \{[^}]*top:\s*var\(--player-panel-stack-top\)/,
+  );
 });

@@ -34,6 +34,8 @@ const elements = {
   questTracker: document.querySelector("#questTracker"),
   questProgress: document.querySelector("#questProgress"),
   expText: document.querySelector("#expText"),
+  expBar: document.querySelector("#expBar"),
+  goldText: document.querySelector("#goldText"),
 };
 
 const game = new PixelRPG(elements);

@@ -1,13 +1,20 @@
+import { grantProgressReward } from "./player-progression.js";
+
 export const ADVENTURE_QUEST = Object.freeze({
   id: "adventureStart",
   targetKinds: Object.freeze(["fire-slime", "forest-slime", "water-slime"]),
   required: 3,
   rewardExp: 15,
+  rewardGold: 30,
 });
 
 export function createInitialProgress() {
   return {
+    level: 1,
     exp: 0,
+    nextLevelExp: 100,
+    gold: 0,
+    completedQuests: [],
     quests: {
       [ADVENTURE_QUEST.id]: {
         status: "available",
@@ -21,6 +28,7 @@ function cloneProgress(progress) {
   const quest = progress.quests[ADVENTURE_QUEST.id];
   return {
     ...progress,
+    completedQuests: [...progress.completedQuests],
     quests: {
       ...progress.quests,
       [ADVENTURE_QUEST.id]: { ...quest },
@@ -48,9 +56,22 @@ export function recordAdventureKill(progress, enemyKind) {
 export function completeAdventureQuest(progress) {
   const next = cloneProgress(progress);
   const quest = next.quests[ADVENTURE_QUEST.id];
-  if (quest.status !== "ready_to_report") return { progress: next, rewardExp: 0 };
+  if (quest.status !== "ready_to_report") {
+    return { progress: next, rewardExp: 0, rewardGold: 0, levelsGained: 0 };
+  }
 
   quest.status = "completed";
-  next.exp += ADVENTURE_QUEST.rewardExp;
-  return { progress: next, rewardExp: ADVENTURE_QUEST.rewardExp };
+  if (!next.completedQuests.includes(ADVENTURE_QUEST.id)) {
+    next.completedQuests.push(ADVENTURE_QUEST.id);
+  }
+  const rewarded = grantProgressReward(next, {
+    exp: ADVENTURE_QUEST.rewardExp,
+    gold: ADVENTURE_QUEST.rewardGold,
+  });
+  return {
+    progress: rewarded.progress,
+    rewardExp: ADVENTURE_QUEST.rewardExp,
+    rewardGold: ADVENTURE_QUEST.rewardGold,
+    levelsGained: rewarded.levelsGained,
+  };
 }

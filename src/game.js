@@ -11,7 +11,8 @@ import { getNpcsForWorld } from "./npc-data.js";
 import { drawNpc, findNearbyNpc } from "./npcs.js";
 import { applyPlayerDamage, respawnPlayer, tickPlayerStatus } from "./player-combat.js";
 import { advancePortalTransition, createPortalTransition } from "./portal-transition.js";
-import { loadProgress, saveProgress } from "./progress-storage.js";
+import { grantSlimeReward, statsForLevel } from "./player-progression.js";
+import { loadProgressWithStatus, saveProgress } from "./progress-storage.js";
 import {
   ADVENTURE_QUEST,
   acceptAdventureQuest,
@@ -59,6 +60,16 @@ export function readableProgressStorage(storage) {
   } catch {
     return null;
   }
+}
+
+export function loadPlayerProgress(storage, nickname) {
+  const loaded = loadProgressWithStatus(storage, nickname);
+  const notice = storage === null
+    ? "진행 상황을 브라우저에서 불러오거나 저장할 수 없습니다."
+    : loaded.migrationWriteFailed
+      ? "진행 상황을 브라우저에 저장할 수 없습니다."
+      : `${nickname}님, 방향키로 이동하고 Ctrl로 공격하세요.`;
+  return { ...loaded, notice };
 }
 
 export class PixelRPG {
@@ -146,8 +157,9 @@ export class PixelRPG {
 
     this.player.name = sanitizeName(nickname);
     const progressStorage = browserStorage();
-    const progressStorageUnavailable = progressStorage === null;
-    this.progress = loadProgress(progressStorage, this.player.name);
+    const loadedProgress = loadPlayerProgress(progressStorage, this.player.name);
+    this.progress = loadedProgress.progress;
+    this.applyProgressionStats(true);
     this.ui.playerName.textContent = this.player.name;
     this.ui.playerCount.textContent = "1";
     this.remotePlayers.clear();
@@ -158,6 +170,7 @@ export class PixelRPG {
     this.drawMinimapBase();
     this.closeNpcDialogue();
     this.updateQuestHud();
+    this.updateProgressHud();
     this.updateNpcPrompt();
 
     if (this.network) await this.network.stop();
@@ -172,9 +185,7 @@ export class PixelRPG {
     this.running = true;
     this.lastFrame = 0;
     this.accumulator = 0;
-    this.notify(progressStorageUnavailable
-      ? "진행 상황을 브라우저에서 불러오거나 저장할 수 없습니다."
-      : `${this.player.name}님, 방향키로 이동하고 Ctrl로 공격하세요.`);
+    this.notify(loadedProgress.notice);
     requestAnimationFrame(timestamp => this.loop(timestamp));
   }
 
@@ -427,8 +438,15 @@ export class PixelRPG {
       const result = completeAdventureQuest(this.progress);
       this.progress = result.progress;
       if (result.rewardExp > 0) {
+        this.applyProgressionStats(result.levelsGained > 0);
         this.updateQuestHud();
-        this.notify(`퀘스트 완료! EXP ${result.rewardExp}을 획득했습니다.`);
+        this.updateProgressHud();
+        this.updateHud();
+        this.updateBiome();
+        this.notify("퀘스트 완료! EXP 15 · Gold 30을 획득했습니다.");
+        if (result.levelsGained > 0) {
+          this.notify(`LEVEL UP! LV.${this.progress.level} · HP와 MP가 회복되었습니다.`);
+        }
         this.persistProgress();
       }
     }
@@ -440,14 +458,33 @@ export class PixelRPG {
     const next = recordAdventureKill(this.progress, enemyKind);
     const after = next.quests[ADVENTURE_QUEST.id];
     this.progress = next;
-    if (after.status === before.status && after.progress === before.progress) return false;
+    return after.status !== before.status || after.progress !== before.progress;
+  }
 
+  recordEnemyKill(enemyKind, { deferEffects = false } = {}) {
+    this.recordQuestKill(enemyKind);
+    if (!ADVENTURE_QUEST.targetKinds.includes(enemyKind)) return null;
+
+    const reward = grantSlimeReward(this.progress);
+    this.progress = reward.progress;
+    this.applyProgressionStats(reward.levelsGained > 0);
+    if (!deferEffects) this.commitEnemyKillEffects([reward]);
+    return reward;
+  }
+
+  commitEnemyKillEffects(rewards) {
+    if (!rewards.length) return;
     this.updateQuestHud();
-    this.notify(after.status === "ready_to_report"
-      ? "슬라임 3/3 처치 완료! 현자 아렌에게 보고하세요."
-      : `슬라임 처치 ${after.progress}/${ADVENTURE_QUEST.required}`);
+    this.updateProgressHud();
+    this.updateHud();
+    this.updateBiome();
+    for (const reward of rewards) {
+      this.notify(`슬라임 처치! EXP +3 · Gold +${reward.rewardGold}`);
+    }
+    if (rewards.some(reward => reward.levelsGained > 0)) {
+      this.notify(`LEVEL UP! LV.${this.progress.level} · HP와 MP가 회복되었습니다.`);
+    }
     this.persistProgress();
-    return true;
   }
 
   persistProgress() {
@@ -458,13 +495,18 @@ export class PixelRPG {
 
   updateQuestHud() {
     const quest = this.progress.quests[ADVENTURE_QUEST.id];
-    this.ui.expText.textContent = String(this.progress.exp);
     this.ui.questProgress.textContent = {
       available: "현자 아렌과 대화하세요.",
       active: `슬라임 처치 ${quest.progress}/${ADVENTURE_QUEST.required}`,
       ready_to_report: `슬라임 처치 ${quest.progress}/${ADVENTURE_QUEST.required} · 아렌에게 보고`,
-      completed: "완료 · EXP 15 획득",
+      completed: "완료 · EXP 15 · Gold 30 획득",
     }[quest.status];
+  }
+
+  updateProgressHud() {
+    this.ui.expText.textContent = `${this.progress.exp} / ${this.progress.nextLevelExp}`;
+    this.ui.expBar.style.transform = `scaleX(${this.progress.exp / this.progress.nextLevelExp})`;
+    this.ui.goldText.textContent = `${this.progress.gold} G`;
   }
 
   updateNpcPrompt() {
@@ -588,15 +630,20 @@ export class PixelRPG {
 
   applyAttackHits(definition) {
     const knockbackDirection = directionVector(this.player.dir);
+    const killRewards = [];
     for (const enemy of this.enemies) {
       if (enemy.state === "dying") continue;
       if (!isTargetInAttackArc(this.player, this.player.dir, enemy, definition.range, definition.arcDegrees)) continue;
       const result = damageEnemy(enemy, definition.damage, knockbackDirection, definition.knockback);
-      if (result.killed) this.recordQuestKill(enemy.kind);
+      if (result.killed) {
+        const reward = this.recordEnemyKill(enemy.kind, { deferEffects: true });
+        if (reward) killRewards.push(reward);
+      }
       if (result.damageNumber) {
         this.damageNumbers.push({ ...result.damageNumber, age: 0, duration: 0.55 });
       }
     }
+    this.commitEnemyKillEffects(killRewards);
   }
 
   applyEnemyContactDamage() {
@@ -683,9 +730,24 @@ export class PixelRPG {
   updateBiome() {
     const biome = getBiome(this.mapId);
     const subtitle = this.ui.playerSubtitle;
-    if (subtitle.dataset.biome !== biome) {
+    const level = String(this.progress.level);
+    if (subtitle.dataset.biome !== biome || subtitle.dataset.level !== level) {
       subtitle.dataset.biome = biome;
-      subtitle.textContent = `LV. 1 · ${biome}`;
+      subtitle.dataset.level = level;
+      subtitle.textContent = `LV. ${level} · ${biome}`;
+    }
+  }
+
+  applyProgressionStats(restore = false) {
+    const { maxHp, maxMp } = statsForLevel(this.progress.level);
+    this.player.maxHp = maxHp;
+    this.player.maxMp = maxMp;
+    if (restore) {
+      this.player.hp = maxHp;
+      this.player.mp = maxMp;
+    } else {
+      this.player.hp = Math.min(this.player.hp, maxHp);
+      this.player.mp = Math.min(this.player.mp, maxMp);
     }
   }
 
