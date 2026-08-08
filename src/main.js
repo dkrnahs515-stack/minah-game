@@ -1,4 +1,4 @@
-import { PixelRPG } from "./game.js";
+import { PixelRPG, dialogueKeyAction } from "./game.js";
 import { chatKeyAction } from "./chat-controller.js";
 
 const elements = {
@@ -25,6 +25,15 @@ const elements = {
   chatForm: document.querySelector("#chatForm"),
   chatInput: document.querySelector("#chatInput"),
   chatStatus: document.querySelector("#chatStatus"),
+  dialogueOverlay: document.querySelector("#dialogueOverlay"),
+  dialogueTitle: document.querySelector("#dialogueTitle"),
+  dialogueBody: document.querySelector("#dialogueBody"),
+  dialogueActionButton: document.querySelector("#dialogueActionButton"),
+  dialogueCloseButton: document.querySelector("#dialogueCloseButton"),
+  npcPrompt: document.querySelector("#npcPrompt"),
+  questTracker: document.querySelector("#questTracker"),
+  questProgress: document.querySelector("#questProgress"),
+  expText: document.querySelector("#expText"),
 };
 
 const game = new PixelRPG(elements);
@@ -40,7 +49,7 @@ const exitButton = document.querySelector("#exitButton");
 const cancelExitButton = document.querySelector("#cancelExitButton");
 const confirmExitButton = document.querySelector("#confirmExitButton");
 
-const storedName = localStorage.getItem("pixelWorldNickname") || "";
+const storedName = readStoredNickname();
 nicknameInput.value = storedName;
 updateNicknameLength();
 queueMicrotask(() => nicknameInput.focus());
@@ -65,7 +74,7 @@ nicknameForm.addEventListener("submit", async event => {
   enterButton.disabled = true;
   enterButton.textContent = "세계에 접속 중...";
   try {
-    localStorage.setItem("pixelWorldNickname", nickname);
+    storeNickname(nickname);
     await game.enter(nickname);
     entryOverlay.hidden = true;
     hud.hidden = false;
@@ -88,7 +97,7 @@ confirmExitButton.addEventListener("click", async () => {
     exitOverlay.hidden = true;
     hud.hidden = true;
     entryOverlay.hidden = false;
-    nicknameInput.value = localStorage.getItem("pixelWorldNickname") || "";
+    nicknameInput.value = readStoredNickname();
     updateNicknameLength();
     nicknameInput.focus();
   } finally {
@@ -99,6 +108,14 @@ confirmExitButton.addEventListener("click", async () => {
 
 addEventListener("keydown", event => {
   if (!["Enter", "Escape"].includes(event.code)) return;
+  if (game.isDialogueOpen()) {
+    const dialogueAction = dialogueKeyAction(event.code);
+    if (dialogueAction === "close") {
+      event.preventDefault();
+      game.closeNpcDialogue();
+    }
+    return;
+  }
   const action = chatKeyAction({
     code: event.code,
     typing: game.isChatTyping(),
@@ -129,6 +146,7 @@ addEventListener("pagehide", () => {
 
 function openExitDialog() {
   if (!game.isRunning()) return;
+  game.closeNpcDialogue();
   game.cancelChatInput();
   game.setInputEnabled(false);
   exitOverlay.hidden = false;
@@ -155,4 +173,20 @@ function validateNickname(value) {
   if (length > 12) return "닉네임은 12자 이내로 입력해 주세요.";
   if (/[<>\\/{}\[\]]/.test(value)) return "닉네임에 사용할 수 없는 문자가 포함되어 있습니다.";
   return "";
+}
+
+function readStoredNickname() {
+  try {
+    return localStorage.getItem("pixelWorldNickname") || "";
+  } catch {
+    return "";
+  }
+}
+
+function storeNickname(nickname) {
+  try {
+    localStorage.setItem("pixelWorldNickname", nickname);
+  } catch {
+    // 닉네임 기억 기능이 막혀도 현재 게임 입장은 계속한다.
+  }
 }

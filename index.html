@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <canvas id="game" aria-label="2D 픽셀 온라인 RPG 게임 화면"></canvas>
+  <canvas id="game" tabindex="0" aria-label="2D 픽셀 온라인 RPG 게임 화면"></canvas>
 
   <div id="entryOverlay" class="screen-overlay">
     <form id="nicknameForm" class="modal-card entry-card" novalidate>
@@ -70,6 +70,7 @@
       <div class="bar hp"><i id="hpBar"></i></div>
       <div class="stat-row"><span>MP</span><b id="mpText">100 / 100</b></div>
       <div class="bar mp"><i id="mpBar"></i></div>
+      <div class="exp-line"><span>누적 EXP</span><b id="expText">0</b></div>
     </section>
 
     <section class="performance-panel glass">
@@ -79,6 +80,25 @@
     </section>
 
     <div id="message" class="message">대륙을 탐험해 보세요.</div>
+
+    <section id="questTracker" class="quest-tracker glass" aria-label="현재 퀘스트">
+      <small>QUEST</small>
+      <strong>모험의 시작</strong>
+      <span id="questProgress">현자 아렌과 대화하세요.</span>
+    </section>
+
+    <div id="npcPrompt" class="npc-prompt" hidden><kbd>F</kbd><span>현자 아렌과 대화하기</span></div>
+
+    <section id="dialogueOverlay" class="dialogue-overlay" hidden>
+      <div class="modal-card dialogue-card" role="dialog" aria-modal="true" aria-labelledby="dialogueTitle" aria-describedby="dialogueBody">
+        <button id="dialogueCloseButton" class="dialogue-close" type="button" aria-label="대화 닫기">×</button>
+        <div class="modal-emblem" aria-hidden="true">✦</div>
+        <p class="eyebrow">VILLAGE QUEST</p>
+        <h2 id="dialogueTitle">현자 아렌</h2>
+        <p id="dialogueBody" class="modal-description"></p>
+        <button id="dialogueActionButton" class="primary-button" type="button">퀘스트 수락</button>
+      </div>
+    </section>
 
     <section id="chatPanel" class="chat-panel glass" aria-label="전체 월드 채팅">
       <header>
@@ -103,6 +123,7 @@
       <div><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd><span>이동</span></div>
       <div><kbd>Ctrl</kbd><span>기본 공격</span></div>
       <div><kbd>Q</kbd><span>강한 공격</span></div>
+      <div><kbd>F</kbd><span>NPC 대화</span></div>
       <div><kbd>E</kbd><kbd>R</kbd><span>빈 스킬</span></div>
       <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><span>아이템</span></div>
       <div><kbd>Enter</kbd><span>전체 채팅</span></div>

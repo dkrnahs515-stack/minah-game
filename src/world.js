@@ -68,7 +68,6 @@ function drawVillage(context, world) {
   drawFarm(context, 240, 650, 690, 430);
   drawShopBlock(context, 2020, 610, 560, 350);
   drawTradePost(context, 1080, 1320, 720, 240);
-  drawNpc(context, 1440, 520, "촌장", "#6f5bd3");
   drawNpc(context, 760, 1160, "농부", "#5f8a3e");
   drawNpc(context, 2200, 1110, "상인", "#ca7b38");
   drawNpc(context, 2440, 1080, "대장장이", "#53677d");
