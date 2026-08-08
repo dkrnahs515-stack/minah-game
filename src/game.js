@@ -11,7 +11,7 @@ import { getNpcsForWorld } from "./npc-data.js";
 import { drawNpc, findNearbyNpc } from "./npcs.js";
 import { applyPlayerDamage, respawnPlayer, tickPlayerStatus } from "./player-combat.js";
 import { advancePortalTransition, createPortalTransition } from "./portal-transition.js";
-import { grantSlimeReward, statsForLevel } from "./player-progression.js";
+import { grantHuntingReward, grantSlimeReward, statsForLevel } from "./player-progression.js";
 import { loadProgressWithStatus, saveProgress } from "./progress-storage.js";
 import {
   ADVENTURE_QUEST,
@@ -31,6 +31,10 @@ import {
 
 const PLAYER_RADIUS = 14;
 const MAX_MEASURED_FPS = 240;
+
+export function createGameCanvasContext(canvas) {
+  return canvas.getContext("2d", { alpha: false });
+}
 
 export function fpsSampleFromFrameSeconds(frameSeconds) {
   if (frameSeconds <= 0) return null;
@@ -75,7 +79,7 @@ export function loadPlayerProgress(storage, nickname) {
 export class PixelRPG {
   constructor(elements) {
     this.canvas = elements.canvas;
-    this.ctx = this.canvas.getContext("2d", { alpha: false, desynchronized: true });
+    this.ctx = createGameCanvasContext(this.canvas);
     this.minimap = elements.minimap;
     this.minimapCtx = this.minimap.getContext("2d");
     this.ui = elements;
@@ -463,13 +467,16 @@ export class PixelRPG {
 
   recordEnemyKill(enemyKind, { deferEffects = false } = {}) {
     this.recordQuestKill(enemyKind);
-    if (!ADVENTURE_QUEST.targetKinds.includes(enemyKind)) return null;
+    const isSlime = ADVENTURE_QUEST.targetKinds.includes(enemyKind);
 
-    const reward = grantSlimeReward(this.progress);
+    const reward = isSlime
+      ? grantSlimeReward(this.progress)
+      : grantHuntingReward(this.progress);
     this.progress = reward.progress;
     this.applyProgressionStats(reward.levelsGained > 0);
-    if (!deferEffects) this.commitEnemyKillEffects([reward]);
-    return reward;
+    const result = { ...reward, isSlime };
+    if (!deferEffects) this.commitEnemyKillEffects([result]);
+    return result;
   }
 
   commitEnemyKillEffects(rewards) {
@@ -479,7 +486,9 @@ export class PixelRPG {
     this.updateHud();
     this.updateBiome();
     for (const reward of rewards) {
-      this.notify(`슬라임 처치! EXP +3 · Gold +${reward.rewardGold}`);
+      const label = reward.isSlime ? "슬라임" : "몬스터";
+      const gold = reward.rewardGold > 0 ? ` · Gold +${reward.rewardGold}` : "";
+      this.notify(`${label} 처치! EXP +${reward.rewardExp}${gold}`);
     }
     if (rewards.some(reward => reward.levelsGained > 0)) {
       this.notify(`LEVEL UP! LV.${this.progress.level} · HP와 MP가 회복되었습니다.`);

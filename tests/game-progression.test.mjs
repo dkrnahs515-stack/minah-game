@@ -112,19 +112,22 @@ async function withMinimumGold(run) {
   }
 }
 
-test("non-slime deaths receive no progression reward or persistence", async () => {
+test("non-slime deaths grant hunting EXP without changing the slime quest", async () => {
   await withMinimumGold(() => {
-    const { game, notifications, storage } = gameHarness();
+    const { game, notifications, storage } = gameHarness({ progress: createInitialProgress() });
     game.enemies = [enemy("boar", 30)];
 
     game.applyAttackHits(lethalAttack);
 
     assert.equal(game.enemies[0].state, "dying");
-    assert.equal(game.progress.exp, 0);
-    assert.equal(game.progress.gold, 0);
+    assert.equal(game.progress.exp, 3);
+    assert.equal(game.progress.gold, 1);
+    assert.equal(game.progress.quests.adventureStart.status, "available");
     assert.equal(game.progress.quests.adventureStart.progress, 0);
-    assert.equal(storage.writes.length, 0);
-    assert.deepEqual(notifications, []);
+    assert.equal(storage.writes.length, 1);
+    assert.equal(storage.writes[0].value.exp, 3);
+    assert.equal(storage.writes[0].value.gold, 1);
+    assert.deepEqual(notifications, ["몬스터 처치! EXP +3 · Gold +1"]);
   });
 });
 
