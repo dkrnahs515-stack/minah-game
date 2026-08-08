@@ -3,11 +3,23 @@ import { layoutChatBubble, worldToScreen } from "./chat-bubble-layout.js";
 import { ChatController } from "./chat-controller.js";
 import { latestBubblesByUid } from "./chat-state.js";
 import { attackDefinition, directionVector, isTargetInAttackArc } from "./combat.js";
+import { DialogueController } from "./dialogue-controller.js";
 import { createEnemies, damageEnemy, drawEnemy, updateEnemies } from "./enemies.js";
 import { movementVector } from "./input.js";
 import { createNetworkAdapter } from "./network.js";
+import { getNpcsForWorld } from "./npc-data.js";
+import { drawNpc, findNearbyNpc } from "./npcs.js";
 import { applyPlayerDamage, respawnPlayer, tickPlayerStatus } from "./player-combat.js";
 import { advancePortalTransition, createPortalTransition } from "./portal-transition.js";
+import { loadProgress, saveProgress } from "./progress-storage.js";
+import {
+  ADVENTURE_QUEST,
+  acceptAdventureQuest,
+  completeAdventureQuest,
+  createInitialProgress,
+  recordAdventureKill,
+} from "./quest-state.js";
+import { arenDialogueModel } from "./aren-dialogue.js";
 import { getWorldDefinition, normalizeWorldId } from "./world-data.js";
 import {
   createWorldLayer,
@@ -23,6 +35,30 @@ export function fpsSampleFromFrameSeconds(frameSeconds) {
   if (frameSeconds <= 0) return null;
   const fps = 1 / frameSeconds;
   return fps <= MAX_MEASURED_FPS ? fps : null;
+}
+
+export function dialogueKeyAction(code) {
+  if (code === "Escape") return "close";
+  if (code === "Enter") return "allow-action";
+  return null;
+}
+
+export function nextDialogueFocus(controls, activeElement, reverse = false) {
+  if (!controls.length) return null;
+  const currentIndex = controls.indexOf(activeElement);
+  if (currentIndex < 0) return reverse ? controls.at(-1) : controls[0];
+  const offset = reverse ? -1 : 1;
+  return controls[(currentIndex + offset + controls.length) % controls.length];
+}
+
+export function readableProgressStorage(storage) {
+  try {
+    if (typeof storage?.getItem !== "function") return null;
+    storage.getItem("pixel-world.progress.access-check");
+    return storage;
+  } catch {
+    return null;
+  }
 }
 
 export class PixelRPG {
@@ -64,6 +100,23 @@ export class PixelRPG {
     this.messageTimer = 0;
     this.chatMessages = [];
     this.chatInputActive = false;
+    this.progress = createInitialProgress();
+    this.npcs = getNpcsForWorld(this.mapId);
+    this.nearbyNpc = null;
+    this.dialogue = new DialogueController({
+      overlay: elements.dialogueOverlay,
+      title: elements.dialogueTitle,
+      body: elements.dialogueBody,
+      actionButton: elements.dialogueActionButton,
+      onAction: action => this.handleDialogueAction(action),
+    });
+    elements.dialogueCloseButton.addEventListener("click", () => this.closeNpcDialogue());
+    elements.dialogueOverlay.addEventListener("keydown", event => {
+      if (event.code !== "Tab") return;
+      const controls = [elements.dialogueActionButton, elements.dialogueCloseButton];
+      event.preventDefault();
+      nextDialogueFocus(controls, document.activeElement, event.shiftKey)?.focus();
+    });
     this.chat = new ChatController({
       panel: elements.chatPanel,
       list: elements.chatMessages,
@@ -92,6 +145,9 @@ export class PixelRPG {
     }
 
     this.player.name = sanitizeName(nickname);
+    const progressStorage = browserStorage();
+    const progressStorageUnavailable = progressStorage === null;
+    this.progress = loadProgress(progressStorage, this.player.name);
     this.ui.playerName.textContent = this.player.name;
     this.ui.playerCount.textContent = "1";
     this.remotePlayers.clear();
@@ -100,6 +156,9 @@ export class PixelRPG {
     this.inputEnabled = true;
     this.resize();
     this.drawMinimapBase();
+    this.closeNpcDialogue();
+    this.updateQuestHud();
+    this.updateNpcPrompt();
 
     if (this.network) await this.network.stop();
     this.chat.reset();
@@ -113,7 +172,9 @@ export class PixelRPG {
     this.running = true;
     this.lastFrame = 0;
     this.accumulator = 0;
-    this.notify(`${this.player.name}님, 방향키로 이동하고 Ctrl로 공격하세요.`);
+    this.notify(progressStorageUnavailable
+      ? "진행 상황을 브라우저에서 불러오거나 저장할 수 없습니다."
+      : `${this.player.name}님, 방향키로 이동하고 Ctrl로 공격하세요.`);
     requestAnimationFrame(timestamp => this.loop(timestamp));
   }
 
@@ -133,6 +194,9 @@ export class PixelRPG {
     this.chat.reset();
     this.chatMessages = [];
     this.chatInputActive = false;
+    this.closeNpcDialogue();
+    this.nearbyNpc = null;
+    this.updateNpcPrompt();
 
     this.remotePlayers.clear();
     this.portalTransition = null;
@@ -154,13 +218,23 @@ export class PixelRPG {
       this.keys.clear();
       this.player.moving = false;
     }
+    this.updateNpcPrompt();
   }
 
   bindEvents() {
     addEventListener("resize", () => this.resize(), { passive: true });
     addEventListener("blur", () => this.keys.clear());
     addEventListener("keydown", event => {
-      if (!this.running || !this.inputEnabled || this.chatInputActive || isTypingTarget(event.target)) return;
+      if (!this.running || this.chatInputActive || isTypingTarget(event.target)) return;
+
+      if (event.code === "KeyF" && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        if (this.isDialogueOpen()) this.closeNpcDialogue();
+        else if (this.inputEnabled) this.openNpcDialogue();
+        event.preventDefault();
+        return;
+      }
+
+      if (!this.inputEnabled || this.isDialogueOpen()) return;
 
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) {
         this.keys.add(event.code);
@@ -188,7 +262,7 @@ export class PixelRPG {
 
     document.querySelectorAll(".slot").forEach(button => {
       button.addEventListener("click", () => {
-        if (!this.running || !this.inputEnabled) return;
+        if (!this.running || !this.inputEnabled || this.isDialogueOpen()) return;
         if (button.dataset.code === "KeyQ") this.tryAttack("strong");
         else this.activateEmptySlot(button.dataset.code);
       });
@@ -262,10 +336,11 @@ export class PixelRPG {
     this.updateMessage(dt);
     this.updateBiome();
     this.updateHud();
+    this.updateNpcPrompt();
   }
 
   updatePlayerMovement(dt) {
-    const movement = this.inputEnabled && !this.chatInputActive
+    const movement = this.inputEnabled && !this.chatInputActive && !this.isDialogueOpen()
       ? movementVector(this.keys)
       : { x: 0, y: 0 };
     const dx = movement.x;
@@ -283,6 +358,7 @@ export class PixelRPG {
   }
 
   openChatInput() {
+    if (this.isDialogueOpen()) return false;
     return this.chat.open();
   }
 
@@ -307,8 +383,104 @@ export class PixelRPG {
     this.chat.renderMessages(this.chatMessages);
   }
 
+  isDialogueOpen() {
+    return !this.ui.dialogueOverlay.hidden;
+  }
+
+  openNpcDialogue() {
+    if (!this.running || !this.inputEnabled || this.chatInputActive || this.portalTransition || this.player.respawnTimer > 0) return false;
+    if (this.mapId !== "village") return false;
+    const npc = findNearbyNpc(this.npcs, this.player);
+    if (!npc || npc.id !== "aren") return false;
+
+    this.keys.clear();
+    this.player.moving = false;
+    this.attackState = null;
+    this.nearbyNpc = npc;
+    this.dialogue.open(arenDialogueModel(this.progress));
+    this.ui.dialogueActionButton.focus();
+    this.updateNpcPrompt();
+    return true;
+  }
+
+  closeNpcDialogue() {
+    const wasOpen = this.isDialogueOpen();
+    this.dialogue.close();
+    if (wasOpen) this.canvas.focus();
+    this.updateNpcPrompt();
+  }
+
+  handleDialogueAction(action) {
+    if (action === "accept") {
+      const before = this.progress.quests[ADVENTURE_QUEST.id].status;
+      this.progress = acceptAdventureQuest(this.progress);
+      if (this.progress.quests[ADVENTURE_QUEST.id].status !== before) {
+        this.updateQuestHud();
+        this.notify("퀘스트 ‘모험의 시작’을 수락했습니다.");
+        this.persistProgress();
+      }
+      this.closeNpcDialogue();
+      return;
+    }
+
+    if (action === "complete") {
+      const result = completeAdventureQuest(this.progress);
+      this.progress = result.progress;
+      if (result.rewardExp > 0) {
+        this.updateQuestHud();
+        this.notify(`퀘스트 완료! EXP ${result.rewardExp}을 획득했습니다.`);
+        this.persistProgress();
+      }
+    }
+    this.closeNpcDialogue();
+  }
+
+  recordQuestKill(enemyKind) {
+    const before = this.progress.quests[ADVENTURE_QUEST.id];
+    const next = recordAdventureKill(this.progress, enemyKind);
+    const after = next.quests[ADVENTURE_QUEST.id];
+    this.progress = next;
+    if (after.status === before.status && after.progress === before.progress) return false;
+
+    this.updateQuestHud();
+    this.notify(after.status === "ready_to_report"
+      ? "슬라임 3/3 처치 완료! 현자 아렌에게 보고하세요."
+      : `슬라임 처치 ${after.progress}/${ADVENTURE_QUEST.required}`);
+    this.persistProgress();
+    return true;
+  }
+
+  persistProgress() {
+    const result = saveProgress(browserStorage(), this.player.name, this.progress);
+    if (!result.ok) this.notify("진행 상황을 브라우저에 저장할 수 없습니다.");
+    return result.ok;
+  }
+
+  updateQuestHud() {
+    const quest = this.progress.quests[ADVENTURE_QUEST.id];
+    this.ui.expText.textContent = String(this.progress.exp);
+    this.ui.questProgress.textContent = {
+      available: "현자 아렌과 대화하세요.",
+      active: `슬라임 처치 ${quest.progress}/${ADVENTURE_QUEST.required}`,
+      ready_to_report: `슬라임 처치 ${quest.progress}/${ADVENTURE_QUEST.required} · 아렌에게 보고`,
+      completed: "완료 · EXP 15 획득",
+    }[quest.status];
+  }
+
+  updateNpcPrompt() {
+    const eligible = this.running
+      && this.inputEnabled
+      && this.mapId === "village"
+      && !this.chatInputActive
+      && !this.isDialogueOpen()
+      && !this.portalTransition
+      && this.player.respawnTimer <= 0;
+    this.nearbyNpc = eligible ? findNearbyNpc(this.npcs, this.player) : null;
+    this.ui.npcPrompt.hidden = !this.nearbyNpc;
+  }
+
   tryEnterPortal() {
-    if (!this.inputEnabled || this.portalCooldown > 0 || this.portalTransition) return;
+    if (!this.inputEnabled || this.isDialogueOpen() || this.portalCooldown > 0 || this.portalTransition) return;
     const portal = findActivePortal(this.mapId, this.player.x, this.player.y, PLAYER_RADIUS);
     if (!portal) return;
     if (!portal.destination) {
@@ -362,6 +534,7 @@ export class PixelRPG {
     }
 
     this.mapId = world.id;
+    this.npcs = getNpcsForWorld(this.mapId);
     this.worldLayer = createWorldLayer(this.mapId);
     this.enemies = createEnemies(this.mapId);
     this.player.x = targetX;
@@ -383,7 +556,7 @@ export class PixelRPG {
   }
 
   tryAttack(kind) {
-    if (!this.running || !this.inputEnabled || this.player.respawnTimer > 0 || this.attackState) return;
+    if (!this.running || !this.inputEnabled || this.isDialogueOpen() || this.player.respawnTimer > 0 || this.attackState) return;
     const definition = attackDefinition(kind);
     const cooldown = kind === "strong" ? this.strongCooldown : this.basicCooldown;
     if (cooldown > 0) {
@@ -419,6 +592,7 @@ export class PixelRPG {
       if (enemy.state === "dying") continue;
       if (!isTargetInAttackArc(this.player, this.player.dir, enemy, definition.range, definition.arcDegrees)) continue;
       const result = damageEnemy(enemy, definition.damage, knockbackDirection, definition.knockback);
+      if (result.killed) this.recordQuestKill(enemy.kind);
       if (result.damageNumber) {
         this.damageNumbers.push({ ...result.damageNumber, age: 0, duration: 0.55 });
       }
@@ -543,6 +717,7 @@ export class PixelRPG {
     const entities = [];
     this.remotePlayers.forEach(remote => entities.push({ ...remote, entityType: "player", remote: true }));
     this.enemies.forEach(enemy => entities.push({ entityType: "enemy", enemy, x: enemy.x, y: enemy.y }));
+    this.npcs.forEach(npc => entities.push({ entityType: "npc", npc, x: npc.x, y: npc.y }));
     entities.push({
       ...this.player,
       uid: this.network?.uid || "local-player",
@@ -557,6 +732,7 @@ export class PixelRPG {
     for (const entity of entities) {
       if (entity.x < cameraX - 60 || entity.x > cameraX + viewW + 60 || entity.y < cameraY - 80 || entity.y > cameraY + viewH + 80) continue;
       if (entity.entityType === "enemy") drawEnemy(ctx, entity.enemy, cameraX, cameraY, alpha);
+      else if (entity.entityType === "npc") drawNpc(ctx, entity.npc, cameraX, cameraY);
       else {
         drawPixelCharacter(ctx, entity, cameraX, cameraY, entity.remote ? null : this.attackState);
         visiblePlayers.push(entity);
@@ -850,4 +1026,11 @@ function sanitizeName(value) {
 }
 function isTypingTarget(target) {
   return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target?.isContentEditable;
+}
+function browserStorage() {
+  try {
+    return readableProgressStorage(globalThis.localStorage);
+  } catch {
+    return null;
+  }
 }

@@ -36,10 +36,22 @@ button, input { font: inherit; }
 .bar i { display: block; width: 100%; height: 100%; transform-origin: left; }
 .bar.hp i { background: linear-gradient(90deg,#ef4444,#fb7185); }
 .bar.mp i { background: linear-gradient(90deg,#2563eb,#38bdf8); }
+.exp-line { display: flex; justify-content: space-between; margin-top: 9px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.12); color: #fde68a; font-size: 12px; font-weight: 900; }
 .performance-panel { position: absolute; top: 14px; left: 358px; display: flex; gap: 12px; padding: 9px 12px; border-radius: 12px; font-size: 12px; color: var(--muted); }
 .performance-panel b { color: #fff; }
 .message { position: absolute; top: 68px; left: 50%; max-width: min(80vw,640px); transform: translateX(-50%) translateY(-6px); padding: 10px 16px; border: 1px solid rgba(255,255,255,.2); border-radius: 999px; background: var(--panel-strong); opacity: 0; transition: opacity .15s ease, transform .15s ease; font-size: 13px; font-weight: 800; }
 .message.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.quest-tracker { position: absolute; top: 185px; right: 14px; width: 250px; padding: 12px 14px; border-radius: 13px; }
+.quest-tracker small { display: block; color: #fde68a; font-size: 9px; font-weight: 900; letter-spacing: .16em; }
+.quest-tracker strong { display: block; margin-top: 3px; font-size: 14px; }
+.quest-tracker span { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
+.npc-prompt { position: absolute; left: 50%; bottom: 112px; z-index: 12; display: flex; align-items: center; gap: 8px; transform: translateX(-50%); padding: 9px 13px; border: 1px solid rgba(253,230,138,.42); border-radius: 999px; background: rgba(15,23,42,.92); color: #fef3c7; font-size: 12px; font-weight: 900; }
+.npc-prompt kbd { border-color: rgba(253,230,138,.55); background: #78350f; }
+.dialogue-overlay { pointer-events: auto; position: absolute; inset: 0; z-index: 35; display: grid; place-items: center; padding: 20px; background: rgba(5,9,17,.78); backdrop-filter: blur(5px); }
+.dialogue-card { position: relative; }
+.dialogue-card .modal-description { min-height: 44px; white-space: pre-line; }
+.dialogue-close { position: absolute; top: 12px; right: 14px; width: 34px; height: 34px; padding: 0; border: 1px solid rgba(255,255,255,.18); border-radius: 9px; background: rgba(51,65,85,.68); color: #e2e8f0; cursor: pointer; font-size: 24px; line-height: 1; }
+.dialogue-close:hover { background: rgba(71,85,105,.9); }
 .chat-panel { pointer-events: auto; position: absolute; left: 14px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 10; display: grid; grid-template-rows: auto minmax(72px,1fr) auto; width: min(360px,calc(100vw - 28px)); height: min(230px,32vh); min-height: 168px; overflow: hidden; border-radius: 14px; text-shadow: none; }
 .chat-panel header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 11px; border-bottom: 1px solid rgba(255,255,255,.12); font-size: 12px; }
 .chat-status { padding: 3px 7px; border-radius: 999px; font-size: 10px; font-weight: 900; }
@@ -118,16 +130,23 @@ kbd { min-width: 23px; padding: 2px 5px; border: 1px solid rgba(255,255,255,.35)
 
 @media (max-width: 900px) {
   .minimap, .controls { display: none; }
-  .performance-panel { top: 145px; left: 14px; }
+  .performance-panel { top: 169px; left: 14px; }
+  .quest-tracker { top: 14px; right: 14px; }
   .slot { width: 54px; height: 54px; }
   .slot-group { gap: 4px; padding: 6px; }
   .hotbar { gap: 7px; }
   .player-panel { width: 310px; }
   .chat-panel { width: min(330px,calc(100vw - 28px)); height: min(205px,30vh); }
 }
+@media (max-width: 620px) {
+  .performance-panel { display: none; }
+  .quest-tracker { top: 171px; left: 14px; right: auto; width: calc(100% - 28px); }
+}
 @media (max-width: 520px) {
   .player-panel { width: calc(100% - 28px); }
   .performance-panel { display: none; }
+  .quest-tracker { top: 171px; left: 14px; right: auto; width: calc(100% - 28px); }
+  .npc-prompt { bottom: calc(266px + env(safe-area-inset-bottom)); max-width: calc(100% - 28px); white-space: nowrap; }
   .player-header strong { max-width: 130px; }
   .slot { width: 46px; height: 46px; }
   .slot .empty { display: none; }
