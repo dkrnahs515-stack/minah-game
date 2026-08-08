@@ -8,6 +8,7 @@
   --accent: #81e6d9;
   --skill: #a78bfa;
   --item: #fbbf24;
+  --player-panel-stack-top: 220px;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -37,6 +38,9 @@ button, input { font: inherit; }
 .bar.hp i { background: linear-gradient(90deg,#ef4444,#fb7185); }
 .bar.mp i { background: linear-gradient(90deg,#2563eb,#38bdf8); }
 .exp-line { display: flex; justify-content: space-between; margin-top: 9px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.12); color: #fde68a; font-size: 12px; font-weight: 900; }
+.bar.exp { height: 7px; margin-top: 4px; }
+.bar.exp i { background: linear-gradient(90deg,#f59e0b,#fde047); }
+.gold-line { display: flex; justify-content: space-between; margin-top: 7px; color: #fbbf24; font-size: 12px; font-weight: 900; }
 .performance-panel { position: absolute; top: 14px; left: 358px; display: flex; gap: 12px; padding: 9px 12px; border-radius: 12px; font-size: 12px; color: var(--muted); }
 .performance-panel b { color: #fff; }
 .message { position: absolute; top: 68px; left: 50%; max-width: min(80vw,640px); transform: translateX(-50%) translateY(-6px); padding: 10px 16px; border: 1px solid rgba(255,255,255,.2); border-radius: 999px; background: var(--panel-strong); opacity: 0; transition: opacity .15s ease, transform .15s ease; font-size: 13px; font-weight: 800; }
@@ -130,7 +134,7 @@ kbd { min-width: 23px; padding: 2px 5px; border: 1px solid rgba(255,255,255,.35)
 
 @media (max-width: 900px) {
   .minimap, .controls { display: none; }
-  .performance-panel { top: 169px; left: 14px; }
+  .performance-panel { top: var(--player-panel-stack-top); left: 14px; }
   .quest-tracker { top: 14px; right: 14px; }
   .slot { width: 54px; height: 54px; }
   .slot-group { gap: 4px; padding: 6px; }
@@ -140,12 +144,11 @@ kbd { min-width: 23px; padding: 2px 5px; border: 1px solid rgba(255,255,255,.35)
 }
 @media (max-width: 620px) {
   .performance-panel { display: none; }
-  .quest-tracker { top: 171px; left: 14px; right: auto; width: calc(100% - 28px); }
+  .quest-tracker { top: var(--player-panel-stack-top); left: 14px; right: auto; width: calc(100% - 28px); }
 }
 @media (max-width: 520px) {
   .player-panel { width: calc(100% - 28px); }
   .performance-panel { display: none; }
-  .quest-tracker { top: 171px; left: 14px; right: auto; width: calc(100% - 28px); }
   .npc-prompt { bottom: calc(266px + env(safe-area-inset-bottom)); max-width: calc(100% - 28px); white-space: nowrap; }
   .player-header strong { max-width: 130px; }
   .slot { width: 46px; height: 46px; }

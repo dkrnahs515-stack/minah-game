@@ -18,7 +18,7 @@ test("퀘스트는 수락 후 승인된 슬라임 세 마리로 보고 가능 �
   });
 });
 
-test("완료 보고는 EXP 15를 한 번만 지급한다", () => {
+test("완료 보고는 EXP 15와 Gold 30을 한 번만 지급하고 완료 목록에 기록한다", () => {
   let state = acceptAdventureQuest(createInitialProgress());
   for (const kind of ["fire-slime", "forest-slime", "water-slime"]) {
     state = recordAdventureKill(state, kind);
@@ -26,9 +26,15 @@ test("완료 보고는 EXP 15를 한 번만 지급한다", () => {
   const first = completeAdventureQuest(state);
   const second = completeAdventureQuest(first.progress);
   assert.equal(first.rewardExp, 15);
+  assert.equal(first.rewardGold, 30);
   assert.equal(first.progress.exp, 15);
+  assert.equal(first.progress.gold, 30);
+  assert.deepEqual(first.progress.completedQuests, ["adventureStart"]);
   assert.equal(second.rewardExp, 0);
+  assert.equal(second.rewardGold, 0);
   assert.equal(second.progress.exp, 15);
+  assert.equal(second.progress.gold, 30);
+  assert.deepEqual(second.progress.completedQuests, ["adventureStart"]);
 });
 
 test("수락 전 처치와 비슬라임 처치는 진행도를 바꾸지 않는다", () => {
@@ -75,7 +81,11 @@ test("잘못된 상태에서의 전이는 보상 없이 복제된 상태를 반�
   assert.equal(completedAgain.rewardExp, 0);
   assert.notStrictEqual(completedAgain.progress, accepted);
   assert.deepEqual(completedAgain.progress, {
+    level: 1,
     exp: 0,
+    nextLevelExp: 100,
+    gold: 0,
+    completedQuests: [],
     quests: { adventureStart: { status: "completed", progress: 3 } },
   });
 });

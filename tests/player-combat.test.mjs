@@ -73,3 +73,14 @@ test("respawn accepts the safe-world spawn selected by the game", () => {
   assert.equal(target.hp, 100);
   assert.equal(target.mp, 100);
 });
+
+test("부활은 레벨에서 갱신된 최대 HP와 MP까지 회복한다", () => {
+  const target = {
+    x: 0, y: 0, prevX: 0, prevY: 0,
+    hp: 0, maxHp: 120, mp: 1, maxMp: 110,
+    invulnerable: 1, hitFlash: 1, respawnTimer: 1,
+  };
+  respawnPlayer(target, { x: 4, y: 5 });
+  assert.equal(target.hp, 120);
+  assert.equal(target.mp, 110);
+});
