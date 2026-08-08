@@ -36,11 +36,15 @@ export function rollSlimeGold(random = Math.random) {
   return PROGRESSION_RULES.slimeGoldMin + Math.floor(sample * 3);
 }
 
-export function grantSlimeReward(progress, random = Math.random) {
-  const rewardGold = rollSlimeGold(random);
+export function grantHuntingReward(progress, { gold = true, random = Math.random } = {}) {
+  const rewardGold = gold ? rollSlimeGold(random) : 0;
   const result = grantProgressReward(progress, {
     exp: PROGRESSION_RULES.slimeExp,
     gold: rewardGold,
   });
   return { ...result, rewardExp: PROGRESSION_RULES.slimeExp, rewardGold };
+}
+
+export function grantSlimeReward(progress, random = Math.random) {
+  return grantHuntingReward(progress, { gold: true, random });
 }
